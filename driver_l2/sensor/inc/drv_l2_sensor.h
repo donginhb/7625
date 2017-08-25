@@ -31,9 +31,7 @@ typedef struct {
 	void   (*wait4FrameEnd)(void);
 	void   (*frameRangeClip)(sensor_frame_range_t* frameRange);
 	void   (*set_fps)(INT32U fpsValue);
-	void   (*set_Maxfps)(INT32U MaxfpsValue);
-	INT32U (*get_fps)(void);
-	//INT32S (*switch_pclk)(INT8U flag);
+	INT32U (*get_fps)(void); 
 }sensor_apis_ops;
 
 /****************************************************************************/

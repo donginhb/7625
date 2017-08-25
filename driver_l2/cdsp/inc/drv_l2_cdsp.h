@@ -17,9 +17,21 @@
 #define CDSP_WIDTH	1280
 #define CDSP_HEIGHT 720
 
-#define LENSCMP		0x10
-#define WBGAIN		0x11
-#define LUTGAMMA	0x12
+#define	PURERAW     0x10 
+#define	LINCORR     0x11
+#define LENSCMP		0x12
+#define WBGAIN		0x13
+#define LUTGAMMA	0x14
+
+//typedef enum {
+#define	DENOISE_DISABLE     0 
+#define	NEW_DENOISE_ONLY    1
+#define	HYBRID_DENOISE_ONLY 2 
+#define	BOTH_DENOISE_AUTO   3	
+#define	BOTH_DENOISE        4
+//} DENOISE_LEVLE;
+
+
 
 extern unsigned short LensCampensation_Table[];
 extern unsigned char EdgeLut_Table[];
@@ -30,8 +42,6 @@ extern INT8U OV7670_Edge_TBLValue[];
 extern INT16U Ov7670_LensCmp_TblValue[];
 extern void ov9712_group_off(void);
 extern void ov9712_sensor_calibration(void);
-extern void ov9712_get_awb_yuv_thr(short *awb_yuv_thr);
-extern void gc1004_get_awb_yuv_thr(short *awb_yuv_thr);
 extern int gc1004_set_exposure_time(sensor_exposure_t *si);
 
 extern INT8U LEElut[];
@@ -50,23 +60,19 @@ extern const INT32S g_H22_color_matrix4gamma045_220[];
 extern void CDSP_CLK_Init(void);
 extern void CDSPFB_CLK_Setting(void);
 extern void SensorIF_Setting(unsigned char front_type);
-extern void MipiIF_Setting(INT16U mipi_type, INT32U width, INT32U height);
+extern void MipiIF_Setting(	unsigned char mipi_type, unsigned int width, unsigned int height);
 extern void sensor_ov9712_init(INT32U format, INT32U width, INT32U height);
-extern void hwMipi_SetSize(INT32U hsize,INT32U vsize);
-extern void hwFront_SetSize(INT32U hsize,INT32U vsize);
 
 void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGHT);
 void gp_cdsp_sharpness(INT32U edge_en, INT32U edge_mode, INT32U sel_fun);
 void gp_cdsp_sensor_start(void);
 void SOi_h22_sensor_calibration(void);
-void soi_h22_get_awb_yuv_thr(short *awb_yuv_thr);
 void gp_cdsp_drop_frame(INT8U drop_frame);
 void gp_Cdsp_SetAWBYUV(const INT16S *AwbTable);
 INT8U hwCdspGetAeAwbSrc(void);
 INT8U hwCdspGetAeAwbSubSample(void);
 void hwCdspGet3ATestWinEn(INT8U *AeWinTest, INT8U *AfWinTest);
 void hwCdspGetRGBWin(INT16U *hwdoffset, INT16U *vwdoffset, INT16U *hwdsize, INT16U *vwdsize);
-void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGHT);	
 
 /**************************************************************************
  *                          D A T A    T Y P E S                          *
@@ -567,14 +573,7 @@ typedef struct gpIspHybridRaw_s
 	unsigned char CrosstalkGbGr;                            
 }gpIspHybridRaw_t;                                                                                   
      
-typedef struct gpCdspWBGain_s
-{
-	unsigned int max_rgain;
-	unsigned int max_bgain;
-	unsigned int min_rgain;
-	unsigned int min_bgain;
-}gpCdspWBGain_t;     
-     
+
 /**
  * enum irqreturn
  * @IRQ_NONE		interrupt was not from this device
@@ -586,6 +585,15 @@ enum irqreturn {
 	IRQ_HANDLED,
 	IRQ_WAKE_THREAD
 };
+
+typedef struct gpCdspWBGain_s
+{
+	unsigned int max_rgain;
+	unsigned int max_bgain;
+	unsigned int min_rgain;
+	unsigned int min_bgain;
+}gpCdspWBGain_t;     
+    
 
 typedef enum irqreturn irqreturn_t;
 
@@ -600,7 +608,6 @@ void gp_cdsp_crop(INT8U crop_en, INT32U crop_width, INT32U crop_height, INT32U f
 void gp_cdsp_yuv_scaler (INT8U scaler_en, INT32U scaler_width, INT32U scaler_height, INT32U frame_width, INT32U frame_height);
 void gp_cdsp_set_ev_val(INT8U ev);
 void gp_cdsp_set_edge(INT32U sharpness);
-void gp_cdsp_set_exp_freq(INT32U freq_num);
 //void gp_isp_set_hybridraw(gpIspHybridRaw_t *argp);
 void gc1004_sensor_calibration(void);
 

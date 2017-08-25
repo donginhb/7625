@@ -79,7 +79,7 @@ void sccb_delay (
 ) {
 	INT16U j;
 
-	for (j=0;j<(i<<4);j++)
+	for (j=0;j<(i<<5);j++)
 		i=i;
 }
 

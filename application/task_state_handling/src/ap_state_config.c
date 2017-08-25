@@ -46,7 +46,7 @@ void ap_state_config_default_set(void)
 #if ENABLE_CHECK_RTC == 1
 	ap_state_config_data_time_save_set_default();
 #endif
-	ap_state_config_record_time_set(5);//循环录像的时间，设置为0表示关闭循环录像功能
+	ap_state_config_record_time_set(4);//循环录像的时间，设置为0表示关闭循环录像功能
 	//ap_state_config_pic_size_set(8);
 	ap_state_resource_time_stamp_position_x_set(65);
 	ap_state_resource_time_stamp_position_y_set(434);

@@ -1130,3 +1130,11 @@ Device is Inserted On Driver : [Hub1 Port7] [VER:0, SN:6&22245a72&0#{53]
    Step 5 ok! Spent Time: 3.635s
    USB Task Finished! Spent Time: 3.962s
    Device is Pullouted.
+
+< 17-08-21 17:42:47 >==============================================
+Device is Inserted On Driver : [Hub1 Port7] [VER:0, SN:6&45dc40a&0#{53f]
+   Device is Pullouted.
+
+< 17-08-21 17:45:05 >==============================================
+Device is Inserted On Driver : [Hub1 Port7] [VER:0, SN:6&45dc40a&0#{53f]
+   Device is Pullouted.

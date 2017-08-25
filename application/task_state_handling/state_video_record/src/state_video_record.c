@@ -246,7 +246,7 @@ void state_video_record_entry(void *para, INT32U state)
 				{
 					power_on_flag = 0;
 
-					if(MODECTION_FLAG)
+					if(1)//MODECTION_FLAG)
 					{
 						for(i=0;i<3;i++)
 						{

@@ -3,7 +3,6 @@
 #include "drv_l1_sfr.h"
 #include "drv_l1_cdsp.h"
 #include "drv_l1_front.h"
-#include "application.h"
 
 #if (defined _DRV_L1_CDSP) && (_DRV_L1_CDSP == 1)                   //
 //================================================================//
@@ -20,7 +19,7 @@ extern INT32U gammatable[];
 extern void CDSP_CLK_Init(void);
 extern void CDSPFB_CLK_Setting(void);
 extern void SensorIF_Setting(unsigned char front_type);
-extern void MipiIF_Setting(INT16U mipi_type, INT32U width, INT32U height);
+extern void MipiIF_Setting(	unsigned char mipi_type, unsigned int width, unsigned int height);
 extern void print_string(CHAR *fmt, ...);
 
 void 	(*cdsp_eof_callback)(void);
@@ -28,7 +27,6 @@ void 	(*cdsp_ae_callback)(void);
 void 	(*cdsp_awb_callback)(void);
 
 volatile INT8U cdsp_eof_occur_flag = 0;
-extern INT8U PreviewIsStopped;
 
 //+++ cdsp overflow 
 volatile INT8U cdsp_overflow_occur_flag = 0;
@@ -166,26 +164,12 @@ void CDSP_SensorIF_CLK(unsigned char front_type)/* 0: Raw 1:YUV */
 }
 
 
-void Mipi_ClkSet(void)
-{
-	#if INIT_MHZ == 144
-		(*((volatile INT32U *) 0xC00A0018)) = 0x1805; //24M  16M ;	SYSCLK/6,
-	//	R_SYSTEM_PLLEN &= ~0xFC00;	
-	//	R_SYSTEM_PLLEN |= 0x4C00;  //144M:3.6M = 144/(2*(1+19));  
-	#elif INIT_MHZ == 96
-		(*((volatile INT32U *) 0xC00A0018)) = 0x1803; //  SYSCLK/4,
-	//	R_SYSTEM_PLLEN &= ~0xFC00;	
-	//	R_SYSTEM_PLLEN |= 0x1C00;  //96M:6M 
-	#elif INIT_MHZ == 120
-	    (*((volatile INT32U *) 0xC00A0018)) = 0x1804; //  SYSCLK/4,
-	#endif
-}
-void MipiIF_Setting(INT16U mipi_type, INT32U width, INT32U height)	/* 0: Raw 1:YUV */
+void MipiIF_Setting( unsigned char mipi_type, unsigned int width, unsigned int height)	/* 0: Raw 1:YUV */
 {
 	INT32U intpl_heigh;
 	INT32U intpl_width;
 	
-	intpl_heigh = height+2; //Enabel new denoise need 2line
+	intpl_heigh = height+4; //Enabel new denoise need 2line
 	intpl_width = width+4; //Left need shift 4pixel column 
 	/*-----------program Mclk IO -------------------*/
 	#if (MCLK_IO_POS == MCLK_IO_B9)
@@ -198,8 +182,7 @@ void MipiIF_Setting(INT16U mipi_type, INT32U width, INT32U height)	/* 0: Raw 1:Y
 
 	/*-----------program Mclk frquence 24Mhz--------*/
 	#if (MCLK_IO_POS == MCLK_IO_B9)
-	timer_pwm_setup(TIMER_B, (12000000), 50, PWM_NRO_OUTPUT);
-	//Mipi_ClkSet();
+	timer_pwm_setup(TIMER_B, (24000000), 50, PWM_NRO_OUTPUT);
 	#else
 	R_SYSTEM_CTRL |= (1<< 11); //0x800;				//SEN_48M_SEL (0xD000000C[11])
 	R_CSI_TG_CTRL1 |= ((1<<11) | (1<<7)); 			//0x0000880/*0xD0500244,//System clock+CLKOEN //Enable CSI MCLK from "SystemCLK/4 = 96/4"*/
@@ -2493,13 +2476,22 @@ void hwCdsp_EnableAE(
 	INT8U ae_win_hold
 )
 {
-	R_CDSP_AE_AWB_WIN_CTRL &= ~0x0111;
-	R_CDSP_AE_AWB_WIN_CTRL |= ae_win_hold & 0x1 | 
-						((INT16U)ae_win_en& 0x1) << 8;  
-	//reflected at next vaild vd edge 
-	//R_CDSP_AE_AWB_WIN_CTRL |= 0x10;
+	//R_CDSP_AE_AWB_WIN_CTRL &= ~0x0110;
+	R_CDSP_AE_AWB_WIN_CTRL &= ~0x0100;	//ae hold default on
 	/* vdupdate */
 	//R_CDSP_FRONT_CTRL0 |= (1<<4);
+
+	/*reflected at next vaild vd edge */
+	//R_CDSP_AE_AWB_WIN_CTRL |= 0x10;
+
+	R_CDSP_AE_AWB_WIN_CTRL |= ((INT16U)ae_win_en& 0x1) << 8;
+
+   if (ae_win_hold == 0) {
+	   R_CDSP_AE_AWB_WIN_CTRL &= ~0x1;
+   }
+   else {
+	   R_CDSP_AE_AWB_WIN_CTRL |= 0x1;
+   }
 }
 
 
@@ -2791,7 +2783,7 @@ void hwCdsp_md_enable(INT8U enable)
 	
 	working_buf = R_CDSP_MD_DMA_SADDR;
 	width = R_CDSP_MD_HSIZE;
-	threshold = R_CDSP_MD_CTRL;
+	threshold = ((R_CDSP_MD_CTRL >>8) & 0x7F);
 	
 	if (threshold && (width>16) && working_buf) 
 	{
@@ -2846,20 +2838,9 @@ void hwCdsp_LinCorr_ReadTable(
 	
 	R_CDSP_MACRO_CTRL = reg_tmp;
 }
-#if 0
-void hwIsp_LinCorr_Table(
-	INT8U *pLinCorrTable
-)
-{
-	INT32S i;
-	ispLiCorData_t *pLiCorData = (ispLiCorData_t *)(CDSP_TABLE_BASEADDR);
-	R_CDSP_MACRO_CTRL = 0x1414;
-	for(i = 0; i < 48; i++) 
-		pLiCorData->LiCorTable[i] = *pLinCorrTable++;
-		
-	R_CDSP_MACRO_CTRL = 0x00;
-}
-#endif
+
+
+
 void hwIsp_LinCorr_Enable(INT8U lincorr_en)
 {
 	R_ISP_LI_HR_CTRL |= lincorr_en;

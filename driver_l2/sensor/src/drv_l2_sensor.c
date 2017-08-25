@@ -27,7 +27,6 @@ extern volatile INT8U cdsp_eof_occur_flag;
 
 sensor_apis_ops Sensor_apis_ops; 
 INT32U sensor_frame_rate;
-INT32U sensor_Max_frame_rate;
 
 #define SENSOR_STATUS_INIT		0x00000001
 #define SENSOR_STATUS_START		0x00000002
@@ -164,21 +163,6 @@ void sensor_frame_end_ready(void)
 void sensor_frame_range_clip(sensor_frame_range_t* frameRange)
 {
 	INT32U Wfactor, Hfactor;
-	
-	#if (sensor_format == GC1004_MIPI) 
-	{	
-		if (SENSOR_FLIP) {
-			//sccb_write(GC1004_SLAVE_ID, 0x17, 0x17);	// [0]mirror [1]flip
-			//sccb_write(GC1004_SLAVE_ID, 0x92, 0x10);
-			R_CDSP_MIPI_HVOFFSET = 0xB | (INT32U)(0) << 12;								
-		}
-		else {
-			//sccb_write(GC1004_SLAVE_ID, 0x17, 0x14);	// [0]mirror [1]flip
-			//sccb_write(GC1004_SLAVE_ID, 0x92, 0x01);
-			R_CDSP_MIPI_HVOFFSET = 0xC | (INT32U)(0) << 12;
-		}
-	}
-	#endif
 
 	frame_width_after_clip = frameRange->clip_w;
 	// Crop
@@ -245,12 +229,10 @@ void sensor_set_fps(INT32U fpsValue)
 		#if ((USE_SENSOR_NAME == SENSOR_SOI_H22) && (sensor_format == SOI_H22_RAW))
 		sccb_write(0x60, 0x22, 0x00);
 		sccb_write(0x60, 0x23, 0x05);
-		#elif ((USE_SENSOR_NAME == SENSOR_GC1004) )
-		sccb_write(0x78, 0x07, 0x01);
-		sccb_write(0x78, 0x08, 0xff);
 		#elif ((USE_SENSOR_NAME == SENSOR_OV9712) && (sensor_format == OV9712_RAW))
 		sccb_write(0x60, 0x3d, 0x08);
 		sccb_write(0x60, 0x3e, 0x05);
+		//hwFront_SetFrameSize(0x196, 0x235, 1280, 720);
 		#endif
 	}
 	else // 30 fps
@@ -266,15 +248,6 @@ void sensor_set_fps(INT32U fpsValue)
 		//hwFront_SetFrameSize(0x196, 0x6B, 1280, 720);
 		#endif
 	}
-}
-
-/****************************************************************************/
-/*
- *	sensor_set_Maxfps:
- */
-void sensor_set_Maxfps(INT32U MaxfpsValue)
-{
-	//sensor_Max_frame_rate = MaxfpsValue;
 }
 
 /****************************************************************************/
@@ -297,7 +270,6 @@ sensor_apis_ops* sensor_attach(void)
 	Sensor_apis_ops.wait4FrameEnd = sensor_frame_end_ready;
 	Sensor_apis_ops.frameRangeClip = sensor_frame_range_clip;
 	Sensor_apis_ops.set_fps = sensor_set_fps;
-	Sensor_apis_ops.set_Maxfps = sensor_set_Maxfps;
 	Sensor_apis_ops.get_fps = sensor_get_fps;
 	
 	return ((sensor_apis_ops*)&Sensor_apis_ops);

@@ -1,0 +1,4 @@
+---- ADC_AUTO_ASIEN Matches (3 in 2 files) ----
+adc_auto_int_set in drv_l1_adc.c (driver_l1\common\src) : 		R_ADC_ASADC_CTRL |= ADC_AUTO_ASIEN;
+adc_auto_int_set in drv_l1_adc.c (driver_l1\common\src) : 		R_ADC_ASADC_CTRL &= ~ADC_AUTO_ASIEN;
+drv_l1_adc.h (driver_l1\common\inc) line 11 : #define ADC_AUTO_ASIEN     (1 << 14)

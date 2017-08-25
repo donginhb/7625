@@ -166,7 +166,7 @@
 #define PIC_Q_VALUE 			50		// 30, 40, 50, 60, 70, 80, 90
 
 // Motion detection
-#define MD_STOP_TIME			180		// when MD_STOP_TIME seconds detect no motion then stop video record
+#define MD_STOP_TIME			120		// when MD_STOP_TIME seconds detect no motion then stop video record
 
 //motion detect sensitive
 #define LOW 					300
@@ -276,8 +276,8 @@
 
 #define CDSP_IQ 				GPCV1248_JVIN_V1_0//GPCV1248_C6_V2_0	
 #define PRODUCT_NUM 			7625
-#define PRODUCT_DATA			20170818
-#define PROGRAM_VERSION_NUM 	1//80
+#define PRODUCT_DATA			20170822
+#define PROGRAM_VERSION_NUM 	32//80
 
 
 
@@ -292,7 +292,7 @@
 #define C_UVC					CUSTOM_ON
 #define C_USB_AUDIO 			CUSTOM_OFF
 #define C_MOTION_DETECTION		CUSTOM_ON
-#define C_AUTO_DEL_FILE 		CUSTOM_OFF
+#define C_AUTO_DEL_FILE 		CUSTOM_ON
 #define C_CYCLIC_VIDEO_RECORD	CUSTOM_ON
 #define C_SCREEN_SAVER			CUSTOM_OFF
 #define C_POWER_OFF_LOGO		CUSTOM_OFF

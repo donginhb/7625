@@ -22,6 +22,7 @@ INT8U			adp_status;
 static INT16U	adp_out_cnt;
 static INT16U	usbd_cnt;
 INT8U  video_flag = 1, motion_flag = 1;
+static INT8U charg_led_flg = 1;
 
 
 #if USB_PHY_SUSPEND 			== 1
@@ -117,6 +118,7 @@ static KEYSTATUS key_map[USE_IOKEY_NO];
 static INT8U	key_detect_timerid;
 static INT8U	up_firmware_flag = 0;
 static INT8U	flash_flag = 0;
+static INT8U 	flick_flag = 0;
 
 static INT8U	r_up_firmware_flag = 0;
 static INT8U	r_flash_flag = 0;
@@ -270,7 +272,7 @@ void set_led_mode(LED_MODE_ENUM mode)
 	g_led_g_state		= 0;						//3oE??!Aoi¢FFFFFFFGgAAA
 	g_led_r_state		= 0;
 	g_led_flicker_state = 0;
-
+	
 	switch ((INT32U)mode)
 	{
 		case LED_INIT:
@@ -463,7 +465,7 @@ void set_led_mode(LED_MODE_ENUM mode)
 			break;
 		case LED_USB_SD:
 			led_red_on();
-			g_led_g_state = 4;
+			g_led_g_state = 5;
 			DBG_PRINT("LED_USB_SD\n");
 			break;
 	}
@@ -585,22 +587,47 @@ void LED_blanking_isr(void)
 
 		if (green_flick%2 == 0)
 		{
-			if (flash_flag == 0)
+			if (flick_flag == 1)
 			{
 				led_green_on();
-				flash_flag			= 1;
+				flick_flag			= 0;
 			}
 			else 
 			{
 				led_green_off();
-				flash_flag			= 0;
+				flick_flag			= 1;
 			}
 
 		}
 		
-		if(green_flick > 127)
+		if(usb_state_get() == 1)
 		{
-			green_flick = 0;
+			if(charg_led_flg == 1)
+			{
+				led_green_on();
+				g_led_g_state = 0;
+			}
+		}
+	}
+	else if(g_led_g_state == 5)
+	{
+		if (green_flick%2 == 0)
+		{
+			led_green_on();
+		}
+		else 
+		{
+			led_green_off();
+		}
+
+		
+		if(usb_state_get() == 1)
+		{
+			if(charg_led_flg == 1)
+			{
+				led_green_on();
+				g_led_g_state = 0;
+			}
 		}
 	}
 
@@ -676,7 +703,7 @@ void LED_blanking_isr(void)
 	}
 	else if (g_led_r_state == 4)
 	{
-		if (g_led_count % 32 == 0)
+		if (g_led_count % 16 == 0)
 		{
 			if (flash_flag == 0)
 			{
@@ -692,7 +719,21 @@ void LED_blanking_isr(void)
 			}
 			if(led_red_green_exc > 6)
 			{
-				g_led_g_state = 4;
+				if(usb_state_get() == 1)
+				{
+					if(charg_led_flg == 1)
+					{
+						led_green_on();
+					}
+					else
+					{
+						g_led_g_state = 4;
+					}
+				}
+				else
+				{
+					g_led_g_state = 4;
+				}
 				g_led_r_state = 0;
 				led_red_off();
 				led_red_green_exc = 0;
@@ -701,7 +742,10 @@ void LED_blanking_isr(void)
 		}
 	}
 
-
+	if(green_flick > 127)
+	{
+		green_flick = 0;
+	}
 }
 
 
@@ -1171,10 +1215,10 @@ void ap_peripheral_key_register(INT8U type)
 		key_map[0].long_flag = 0;
 
 
-		key_map[1].key_io	= FUN_KEY;
-		key_map[1].key_function = (KEYFUNC)ap_peripheral_functionc_key_exe;
-		key_map[1].key_active = 1;
-		key_map[1].long_flag = 0;
+		//key_map[1].key_io	= FUN_KEY;
+		//key_map[1].key_function = (KEYFUNC)ap_peripheral_functionc_key_exe;
+		//key_map[1].key_active = 1;
+		//key_map[1].long_flag = 0;
 
 		ad_key_map[0].key_io = FUNCTION_KEY;
 		ad_key_map[0].key_function = (KEYFUNC)ap_peripheral_null_key_exe;
@@ -1434,7 +1478,7 @@ void ap_peripheral_charge_det(void)
 
 	pin_state			= gpio_read_io(CHARGE_PIN);
 
-	//DBG_PRINT("pin_state=%d",pin_state);
+	DBG_PRINT("pin_state=%d",pin_state);
 	if (pin_state == prev_pin_state)
 	{
 		loop_cnt++;
@@ -1456,9 +1500,17 @@ void ap_peripheral_charge_det(void)
 		if (prev_ledtype != led_type)
 		{
 			prev_ledtype		= led_type;
-
-			if (((video_record_sts & 0x02) == 0))
+			
+			if ((video_record_sts & 0x02) == 0)
 			{
+				if(led_type == LED_CHARGEING)
+				{
+					charg_led_flg = 0;
+				}
+				else
+				{
+					charg_led_flg = 1;
+				}
 				//if (storage_sd_upgrade_file_flag_get() != 2)
 					//msgQSend(PeripheralTaskQ, MSG_PERIPHERAL_TASK_LED_SET, &led_type, sizeof(INT32U), MSG_PRI_NORMAL);
 			}

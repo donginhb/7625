@@ -395,8 +395,9 @@ void ap_state_handling_power_off(void)
 #if 0
 		gpio_write_io(LED, 1);	//turn off led
 #endif
-	
+	led_green_off();
 	led_red_off();
+	delay(20000);
     led_green_on();
 	delay(20000);
 	delay(20000);

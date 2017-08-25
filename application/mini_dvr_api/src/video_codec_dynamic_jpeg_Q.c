@@ -19,13 +19,13 @@ void Dynamic_Tune_Q(INT32U jpeg_size, INT32U full_size_flag)
 //DBG_PRINT("L%d-%d-%d",max_VLC_size/1024,full_size_flag/1024,current_Y_Q_value);
         if ( (my_pAviEncVidPara->encode_width == AVI_WIDTH_1080FHD) ||(my_pAviEncVidPara->encode_width == AVI_WIDTH_1080P) )
 		{
-		    max_VLC_size=307200;//320K
+		    max_VLC_size=256000;//320K
  			//if (full_size_flag)
- 			if(jpeg_size>327680)
+ 			if(jpeg_size>256000)
 			{
-				current_Y_Q_value -= 20;
+				current_Y_Q_value -= 25;
 			}
-			else if (jpeg_size > (max_VLC_size-(30*1024)))
+			else if (jpeg_size > (max_VLC_size-(40*1024)))
 			{
 				current_Y_Q_value -= 5;
 			}
@@ -34,9 +34,9 @@ void Dynamic_Tune_Q(INT32U jpeg_size, INT32U full_size_flag)
 				current_Y_Q_value += 5;
 			}
 
-			if(current_Y_Q_value < 30)
+			if(current_Y_Q_value < 15)
 			{
-				current_Y_Q_value = 30;
+				current_Y_Q_value = 15;
 			}
 			if(current_Y_Q_value >= 50)
 		     {

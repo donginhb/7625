@@ -7,6 +7,7 @@
 #include "gplib.h"
 #include "gp_aeawb.h"
 #include "stdlib.h"
+#include "drv_l1_cache.h"
 
 #include "ap_state_handling.h"
 
@@ -15,7 +16,6 @@
 //#include "my_video_codec_callback.h"
 
 extern volatile INT8U cdsp_eof_occur_flag;
-
 
 extern void CDSP_SensorIF_CLK(unsigned char front_type);
 extern void gpCdspSetBadPixOb(gpCdspBadPixOB_t *argp);
@@ -26,7 +26,9 @@ extern INT8U ap_state_config_white_balance_get(void);
 extern INT8U ap_state_config_ev_get(void);
 extern INT8U ap_state_config_iso_get(void);
 extern INT8U ap_state_config_light_freq_get(void);
+extern void hwFront_SetSize(INT32U hsize,INT32U vsize);
 extern void hwMipi_SetSize(INT32U hsize,INT32U vsize);
+extern OS_EVENT* my_AVIEncodeApQ;
 
 #if  (USE_SENSOR_NAME == SENSOR_SOI_H22)	
 	extern sensor_exposure_t *jxh22_get_senInfo(void);
@@ -40,7 +42,6 @@ extern void hwMipi_SetSize(INT32U hsize,INT32U vsize);
 	extern int H22_get_night_ev_idx(void);
 	extern int H22_get_max_ev_idx(void);
 	extern void H22_set_exp_freq(int freq);		
-	extern gpCdspWBGain_t *soi_h22_awb_r_b_gain_boundary(void);	
 #elif (USE_SENSOR_NAME == SENSOR_GC1004)
 	extern sensor_exposure_t *gc1004_get_senInfo(void);
 	//extern void gc1004_get_senInfo2(sensor_exposure_t *pSensorInfo) ;
@@ -67,22 +68,16 @@ extern void hwMipi_SetSize(INT32U hsize,INT32U vsize);
 	extern int ov9712_get_night_ev_idx(void);
 	extern int ov9712_get_max_ev_idx(void);
 	extern void ov9712_set_exp_freq(int freq);
-	extern void ov9712_group_off(void);	
-	extern gpCdspWBGain_t *ov9712_awb_r_b_gain_boundary(void);
 #endif
+
+	void DenoiseLevelSetting(INT8U T1,INT8U T2,INT8U T3,INT8U T4,INT8U W1,INT8U W2,INT8U W3);
 /**************************************************************************
  *                           C O N S T A N T S                            *
  **************************************************************************/
-
-typedef enum {
-	DENOISE_DISABLE = 0,
-	NEW_DENOISE_ONLY,
-	HYBRID_DENOISE_ONLY, 
-	BOTH_DENOISE	
-} DENOISE_LEVLE;
-
-
-
+#define INTIT_DENOISE_EN	DISABLE
+#define DENOISE_SELECT 		BOTH_DENOISE//HYBRID_DENOISE_ONLY
+#define ALWY_ON_DENOISE		DISABLE
+#define LENS_CMP_CTRL		DISABLE
 
 #define C_BUFFER_MAX		5
 
@@ -95,7 +90,7 @@ typedef enum {
 #define CDSP_HIGH_LUM		0x40
 #define CDSP_AWB_SET_GAIN	0x80
 #define CDSP_SAT_SWITCH		0x100
-
+#define CDSP_AEAWB_CTRL_EN	0x200
 #define	WEAK_DENOISE		0x03
 #define MEDIUM_DENOISE		0x09
 #define STRONG_DENOISE		0x11
@@ -184,11 +179,12 @@ static gpIspHybridRaw_t IspHybridRaw;
 gpCdspWhtBal_t wb_gain;
 gpCdspWbGain2_t wb_gain2;
 
-static INT32U denoise_level = NEW_DENOISE_ONLY;//DENOISE_DISABLE;////////fk
+static INT32U denoise_level = DENOISE_DISABLE;///NEW_DENOISE_ONLY;//
 static INT32U ae_frame=0;
 static INT32U ae_frame_thr = 3;
 static INT32U ae_switch_flag = 0;
 static INT32U awb_frame=0;
+static INT32U hist_low1 = 0, hist_high1 = 0;
 unsigned char *awb = NULL;
 unsigned char *ae = NULL;
 
@@ -202,6 +198,7 @@ INT8U ae_workszie[1024], awb_worksize[1024];
 // add by Comi 20140924
 static int sat_yuv_level[4][6]; // [6] ==> y_offset, u_offset, v_offset, y_scale, u_scale, v_scale
 static int sat_yuv_thr[4];
+static int edge_level[4];
 
 static int uv_div[4][6] = 
 {
@@ -255,7 +252,7 @@ void gp_Cdsp_SetAWBYUV(const INT16S *AwbTable)
 	
 	awb.awb_win_en = ENABLE;
 	awb.awb_win_hold = DISABLE;
-	awb.awbclamp_en = DISABLE;//ENABLE;
+	awb.awbclamp_en = ENABLE;//ENABLE;
 	
 	awb.awbwinthr = AwbTable[0];
 		
@@ -433,8 +430,8 @@ void gp_cdsp_set_wb_gain(INT8U gp_wbgainen, INT8U gp_wbgain2en)
 	wht_bal.rgain = 71; 
 	wht_bal.bgain = 82;
 	#else	//6400K
-	wht_bal.rgain = 88; 
-	wht_bal.bgain = 65;   
+	wht_bal.rgain = 116; 
+	wht_bal.bgain = 98;   
 	#endif
 #elif (USE_SENSOR_NAME == SENSOR_OV9712)	
 	#if 0 //3600K
@@ -509,7 +506,7 @@ int gp_cdsp_set_aeawb_window(int width, int height, int tagetY)
 	ae.ae_win_hold = 0;
 	ae.phaccfactor = raw_win.hwdsize;
 	ae.pvaccfactor = raw_win.vwdsize;
-	ae.ae_meter = CDSP_AE_METER_CENTER_WEIGHTED_AVG_CVR;// CDSP_AE_METER_SPOT; //CDSP_AE_METER_CENTER_WEIGHTED_AVG;
+	ae.ae_meter = CDSP_AE_METER_CENTER_WEIGHTED_AVG;// CDSP_AE_METER_SPOT; //CDSP_AE_METER_CENTER_WEIGHTED_AVG;
 	//ae.ae_meter = CDSP_AE_METER_AVG;
 	
 	gp_cdsp_ae_set_meter(CDSP_AE_METER_CENTER_WEIGHTED_AVG_CVR, CdspDev->ae_workmem);
@@ -521,6 +518,7 @@ int gp_cdsp_set_aeawb_window(int width, int height, int tagetY)
 
 	// set Target Lum		
 	gp_cdsp_ae_set_target_lum(CdspDev->ae_workmem, TARGET_Y);
+	//gp_cdsp_ae_set_target_lum_night(CdspDev->ae_workmem, 0x40);
 	
 	return 0;
 }
@@ -631,7 +629,7 @@ void gp_cdsp_set_edge(INT32U sharpness)
 	edge.lhmode = 0;
 	edge.lhdiv = 1;
 	edge.lhtdiv = 0;
-	edge.lhcoring = 1;//16;
+	edge.lhcoring = 1;
 	edge.Qcnt = 0;
 	edge.Qthr = 255;
 	edge.lf00 = 0x9;
@@ -721,14 +719,12 @@ void ap_iso_set(INT32U iso)
 void gp_isp_iso_set(INT32U iso)
 {
 	//sensor_exposure_t iso_seinfo;
-	OS_CPU_SR cpu_sr;
 
+	OS_CPU_SR cpu_sr;
 	if (iso == 0x81){
 		iso = 0x1881;
 	}
-
 	OS_ENTER_CRITICAL();
-	
 	#if (USE_SENSOR_NAME == SENSOR_SOI_H22)	
 		H22_get_exposure_time(&seInfo);
 	#elif (USE_SENSOR_NAME == SENSOR_GC1004)
@@ -736,9 +732,7 @@ void gp_isp_iso_set(INT32U iso)
 	#elif (USE_SENSOR_NAME == SENSOR_OV9712)
 		ov9712_get_exposure_time(&seInfo);	
 	#endif
-
 	OS_EXIT_CRITICAL();
-
 	seInfo.userISO = iso;
 	//p_seInfo->userISO = iso;
 		
@@ -813,8 +807,12 @@ static void gp_cdsp_handle_awb(void)
 		return;
 	}
 	
-	if((CdspDev->ae_awb_flag & CDSP_AWB_CTRL_EN) != 0)
-		return ;
+	if(((CdspDev->ae_awb_flag & CDSP_AEAWB_CTRL_EN) != 0)
+		|| ((CdspDev->ae_awb_flag & CDSP_AWB_CTRL_EN) != 0))
+	{
+		return;
+	}
+	hwCdsp_EnableAWB(0, 1);	//hold awb cnt
 		
 	gpHalCdspGetAwbSumCnt(1, &cnt);
 	awb_result->sumcnt[0] = cnt;
@@ -885,13 +883,14 @@ static void gp_cdsp_handle_awb(void)
 	CdspDev->ae_awb_flag |= CDSP_AWB_CTRL_EN;
 	//wake_up_interruptible(&CdspDev->ae_awb_wait_queue);	//?
 	
+	hwCdsp_EnableAWB(1, 0);	//update awb cnt
 	//DBG_PRINT("2 AWB ISR, flag = 0x%x\r\n", CdspDev->ae_awb_flag);
 }
+
 INT8S gp_cdsp_get_exposure_time_status(void)
 {
 	return CdspDev->ae_ret;
 }
-
 
 static void gp_cdsp_handle_ae(void)
 {
@@ -902,13 +901,19 @@ static void gp_cdsp_handle_ae(void)
 	if (CdspDev == NULL){
 		return;
 	}
-	if((CdspDev->ae_awb_flag & CDSP_AE_CTRL_EN) != 0)
+
+	if(((CdspDev->ae_awb_flag & CDSP_AEAWB_CTRL_EN) != 0)
+		|| ((CdspDev->ae_awb_flag & CDSP_AE_CTRL_EN) != 0))
+	{
 		return;
-	
+	}
+
 	if(gpHalCdspGetAEActBuff()) {
+	    cache_invalid_range((INT32U)CdspDev->aeAddr[1],64);
 		gp_memcpy((INT8S *) argp->ae_win, (INT8S *)CdspDev->aeAddr[1], 64);
 		//ptr = (unsigned int *)CdspDev->aeAddr[1];
 	} else {
+	    cache_invalid_range((INT32U)CdspDev->aeAddr[0],64);
 		gp_memcpy((INT8S *) argp->ae_win, (INT8S *)CdspDev->aeAddr[0], 64);
 		//ptr = (unsigned int *)CdspDev->aeAddr[0];
 	}
@@ -965,7 +970,6 @@ static void gp_cdsp_handle_capture(void)
 }
 #endif
 
-void gp_cdsp_set_exposure_time(void);
 static void gp_cdsp_handle_eof(void)
 {
 	
@@ -974,7 +978,11 @@ static void gp_cdsp_handle_eof(void)
 	if (CdspDev == NULL) {
 		return;
 	}
-	
+
+	if((CdspDev->ae_awb_flag & CDSP_AEAWB_CTRL_EN) != 0) {
+		return;
+	}
+
 	if (CdspDev-> ae_ret == AE_CHANGE) 
 	{
 	
@@ -1015,8 +1023,10 @@ static void gp_cdsp_handle_eof(void)
 	//if(CdspDev -> awb_ret_flag != AWB_FAIL || CdspDev -> awb_ret_flag != AWB_RET)
 	if(CdspDev->ae_awb_flag & CDSP_AWB_SET_GAIN	!= 0)
 	{
-		hwCdsp_SetWb_R_B_Gain(wb_gain.rgain, wb_gain.bgain);	
-		//DBG_PRINT("r:%d, b:%d\r\n", wb_gain.rgain, wb_gain.bgain);
+		hwCdsp_SetWb_R_B_Gain(wb_gain.rgain, wb_gain.bgain);
+		
+		//hwCdsp_SetWb_R_B_Gain(116, 98);
+		
 		CdspDev->ae_awb_flag &= (~CDSP_AWB_SET_GAIN);
 	}
 #if 1	
@@ -1051,86 +1061,137 @@ static void gp_cdsp_handle_eof(void)
 	{	
 		if (CdspDev->ae_awb_flag & CDSP_HIGH_LUM)
 		{
-			//for enable new denoise
-			#if ((sensor_format == GC1004_MIPI) || (sensor_format == SOI_H22_MIPI))
 			hwMipi_SetSize(1280, 720);
-			#endif	
 			hwFront_SetSize(1280, 720);
 			hwIsp_SetImageSize(1280, 720);	
 			hwCdsp_EnableNewDenoise(DISABLE);
-			hwIsp_EnableDenoise(DISABLE);
+			hwIsp_EnableDenoise(DISABLE);			
 			hwIsp_EnableCrostlk(DISABLE);
 			
 			hwCdsp_SetBadPixel(160, 160, 160);
-			//hwCdsp_SetYuvHAvg(3,0,0,0);
-			hwCdsp_SetEdgeAmpga(DAYLIGHT_EDGE, 0);
+			hwCdsp_IntplThrSet(24, 240);
 
-			//gp_cdsp_set_ev_val(6);
-			//DBG_PRINT("hdf");
-			
+			hwCdsp_SetEdgeAmpga(DAYLIGHT_EDGE, 0);
+			hwCdsp_SetYuvHAvg(3, 0, 0, 0);
 			//DBG_PRINT("\r\n\r\n ============== nd DISABLE ================\r\n\r\n");
 		}
 		else if (CdspDev->ae_awb_flag & CDSP_LOW_LUM)
 		{
 			hwCdsp_SetBadPixel(80, 80, 80);
 			
-			#if 1
+			
+			#if (DENOISE_SELECT == BOTH_DENOISE_AUTO)
 			if(denoise_level == HYBRID_DENOISE_ONLY)
 			{
-				#if ((sensor_format == GC1004_MIPI) || (sensor_format == SOI_H22_MIPI))
-				hwMipi_SetSize(1280, 720);
-				#else
-				hwFront_SetSize(1280, 720);
-				#endif
-				hwIsp_SetImageSize(1280, 720);
 				hwCdsp_EnableNewDenoise(DISABLE);
+			
+				hwMipi_SetSize(1280, 720);
+				hwFront_SetSize(1280, 720);
+				hwIsp_SetImageSize(1280, 720);	
+			
+				hwCdsp_EnableNewDenoise(DISABLE);					
 				hwIsp_EnableDenoise(ENABLE);
-				
-				//gp_cdsp_set_ev_val(4);
-				//DBG_PRINT("hd-");
+				hwIsp_EnableCrostlk(DISABLE);	
+				hwCdsp_SetYuvHAvg(3, 0, 0, 0);	
+				hwCdsp_IntplThrSet(40, 230);	
+				hwCdsp_SetBadPixel(80, 80, 80);	 
 			}
 			else if(denoise_level == NEW_DENOISE_ONLY)
 			{
-				#if ((sensor_format == GC1004_MIPI) || (sensor_format == SOI_H22_MIPI))
-				hwMipi_SetSize(1280, 720+2);
-				#else
-				hwFront_SetSize(1280, 720+2);
-				#endif
-				hwIsp_SetImageSize(1280, 720+2);		
-				hwCdsp_EnableNewDenoise(ENABLE);	
-				hwIsp_EnableDenoise(ENABLE);
-				hwIsp_EnableCrostlk(ENABLE);
+				hwIsp_EnableDenoise(DISABLE);
 				
-				//gp_cdsp_set_ev_val(ae_ev);
-				//DBG_PRINT("nd-");
+				hwMipi_SetSize(1280, 720+2);
+				hwFront_SetSize(1280, 720+2);				
+				hwIsp_SetImageSize(1280, 720+2);
+						
+				hwCdsp_EnableNewDenoise(ENABLE);				
+				hwIsp_EnableCrostlk(DISABLE);
+				hwCdsp_SetYuvHAvg(3, 0, 1, 1);
+				hwCdsp_IntplThrSet(64, 220);
+				hwCdsp_SetBadPixel(40, 40, 40);
 			}
-			#else			
+			#elif (DENOISE_SELECT == HYBRID_DENOISE_ONLY)			
+				hwMipi_SetSize(1280, 720);
+				hwFront_SetSize(1280, 720);
+				hwIsp_SetImageSize(1280, 720);
+				
+				hwIsp_EnableDenoise(ENABLE);
+				hwIsp_EnableCrostlk(DISABLE);				
+				hwCdsp_SetYuvHAvg(3, 0, 0, 0);			
+			#elif (DENOISE_SELECT == NEW_DENOISE_ONLY)				
+				hwIsp_EnableDenoise(DISABLE);			
+				hwMipi_SetSize(1280, 720+2);
+				hwFront_SetSize(1280, 720+2);
+				hwIsp_SetImageSize(1280, 720+2);
+			
+				hwCdsp_EnableNewDenoise(ENABLE);
+				hwIsp_EnableCrostlk(DISABLE);
+				hwCdsp_SetYuvHAvg(3, 0, 1, 1);
+			#elif (DENOISE_SELECT == BOTH_DENOISE)		
+				hwMipi_SetSize(1280, 720+2);
+				hwFront_SetSize(1280, 720+2);		
+				hwIsp_SetImageSize(1280, 720+2);
+				
+			    if( (seInfo.sensor_ev_idx > sat_yuv_thr[0])&&(seInfo.sensor_ev_idx < sat_yuv_thr[2]) ) // weak setting
+			      {
+			        
+			        DenoiseLevelSetting(0,8,16,32,1,2,3);
+			      }
+			     /* else if((seInfo.sensor_ev_idx > sat_yuv_thr[1])&&(seInfo.sensor_ev_idx < sat_yuv_thr[2])) // medium setting
+			      {
+			        
+			        DenoiseLevelSetting(8,16,32,48,2,4,6);			      
+			      }*/
+			      else if (seInfo.sensor_ev_idx > sat_yuv_thr[2]) // string setting
+			      {
+			        
+			        DenoiseLevelSetting(8,16,32,48,2,4,6);			       
+			      }
+			     
+				
+				hwCdsp_EnableNewDenoise(ENABLE);
+				hwIsp_EnableDenoise(ENABLE);
+				hwIsp_EnableCrostlk(DISABLE);
+				hwCdsp_SetYuvHAvg(3, 0, 1, 1);
+				
+				hwCdsp_IntplThrSet(64, 220);
+				hwCdsp_SetBadPixel(40, 40, 40);
+				
+			#elif (DENOISE_SELECT == DENOISE_DISABLE)
+			hwMipi_SetSize(1280, 720);
+			hwFront_SetSize(1280, 720);
+			hwIsp_SetImageSize(1280, 720);
+			
 			hwCdsp_EnableNewDenoise(DISABLE);	
 			hwIsp_EnableDenoise(DISABLE);
-			
-			//gp_cdsp_set_ev_val(ae_ev);
-			//DBG_PRINT("ldf");
-			#endif
+			hwIsp_EnableCrostlk(DISABLE);
+			#endif			
 						
-			hwCdsp_SetEdgeAmpga(NIGHT_EDGE, 0);
 			//DBG_PRINT("\r\n\r\n ============== nd ENABLE ================\r\n\r\n");
 		}
-                   //DBG_PRINT("DENOISE ON\r\n");
-		CdspDev->ae_awb_flag &= (~CDSP_LUM_STATUS);	
 
+		CdspDev->ae_awb_flag &= (~CDSP_LUM_STATUS);		
 	}
-	
 	
 	if((CdspDev->ae_awb_flag & CDSP_SAT_SWITCH) != 0)
 	{						
 		if(CdspDev->sat_contr_idx != -1)		
 		{	
+			int idx;
 			int *p_yuv, *p_uvdiv;	
-			p_yuv = &sat_yuv_level[CdspDev->sat_contr_idx][0];
-			p_uvdiv = &uv_div[CdspDev->sat_contr_idx][0];
+			
+			idx = CdspDev->sat_contr_idx;
+			
+			hwCdsp_SetEdgeAmpga(edge_level[idx], 0);
+			
+			p_yuv = &sat_yuv_level[idx][0];
+			p_uvdiv = &uv_div[idx][0];
 			hwCdsp_SetYuvSPEffOffset(p_yuv[0], p_yuv[1], p_yuv[2]);
 			hwCdsp_SetYuvSPEffScale(p_yuv[3], p_yuv[4], p_yuv[5]);
-			hwCdsp_SetUVScale(1, p_uvdiv[0], p_uvdiv[1], p_uvdiv[2], p_uvdiv[3], p_uvdiv[4], p_uvdiv[5]);
+			
+			//hwCdsp_SetUVScale(1, p_uvdiv[0], p_uvdiv[1], p_uvdiv[2], p_uvdiv[3], p_uvdiv[4], p_uvdiv[5]);
+			hwCdsp_SetUVScale(0,0,0,0,0,0,0);
+			
 			CdspDev->ae_awb_flag &= (~CDSP_SAT_SWITCH);
 			
 			//gp_cdsp_set_ev_val(ae_ev);
@@ -1139,10 +1200,14 @@ static void gp_cdsp_handle_eof(void)
 		else
 		{
 			hwCdsp_SetUVScale(0,0,0,0,0,0,0);
+			hwCdsp_SetEdgeAmpga(DAYLIGHT_EDGE, 0);
 			CdspDev->ae_awb_flag &= (~CDSP_SAT_SWITCH);
 		}
-		
-	}	
+		}
+
+	if(CdspDev->ae_ret == -1) {
+		CdspDev->ae_awb_flag |= CDSP_AEAWB_CTRL_EN;
+	}
 #endif		
 }
 
@@ -1252,15 +1317,18 @@ void gpCdspSetNewDenoise(
 {
 	//DEBUG("%s: newdenoiseen = %d\n", __FUNCTION__, argp->newdenoiseen);
 	
-	    hwCdsp_EnableNewDenoise(argp->newdenoiseen);
+	if(argp->ndeluten) {
+		//hwCdsp_InitEdgeLut((INT8U *)LEElut);
+		hwCdsp_NewDEdgeLut((INT8U *)g_nd_edge_table);
+	}
+
+	hwCdsp_EnableNewDenoise(argp->newdenoiseen);
 	hwCdsp_SetNewDenoise_Sel_Mirror(argp->ndmirvsel, argp->ndmiren);
 	hwCdsp_EnableNdEdge(argp->ndedgeen, argp->ndeluten);
 	//gpHalCdspSetNdEdgeLCoring(argp->ndlhdiv, argp->ndlhtdiv, argp->ndlhcoring, argp->ndlhmode);
 	hwCdsp_SetNdEdgeLCoring(argp->ndlhdiv, argp->ndlhtdiv, argp->ndlhcoring);
 	hwCdsp_SetNdEdgeAmpga(argp->ndampga);
-	if(argp->ndeluten) {
-		hwCdsp_NewDEdgeLut((INT8U *)g_nd_edge_table);
-	}
+
 	/*3x3 programing matrix */
 	gpHalCdspSetNdEdgeFilter(0, argp->ndlf00, argp->ndlf01, argp->ndlf02);
 	gpHalCdspSetNdEdgeFilter(1, argp->ndlf10, argp->ndlf11, argp->ndlf12);
@@ -1412,7 +1480,8 @@ void cdsp_ae_awb_init(void)
 	//INT32U ae_workmem_size, awb_workmem_size;
 	
 	sensor_calibration_t *p_seCalibration;
-	///gpCdspWBGain_t *p_WB_Gain;
+	
+	gpCdspWBGain_t *p_WB_Gain;
 	
 	//jxh22_get_senInfo2(&seInfo2);	//seInfo2 memcpy use
 
@@ -1491,25 +1560,10 @@ void cdsp_ae_awb_init(void)
 	wb_gain.bgain = gp_cdsp_awb_get_b_gain(awb);
 	wb_gain.rgain = gp_cdsp_awb_get_r_gain(awb);
 	
-	gp_cdsp_awb_set_r_b_gain_boundary(awb, 95, 120, 60, 60);
-	/*
-#if  (USE_SENSOR_NAME == SENSOR_SOI_H22)
-    p_WB_Gain =soi_h22_awb_r_b_gain_boundary();    
-  //  DBG_PRINT("max_rgain= %d, max_bgain= %d,min_rgain= %d, min_bgain= %d\r\n", p_WB_Gain->max_rgain, p_WB_Gain->max_bgain,  p_WB_Gain->min_rgain,  p_WB_Gain->min_bgain);    
-    gp_cdsp_awb_set_r_b_gain_boundary(awb, p_WB_Gain->max_rgain, p_WB_Gain->max_bgain,  p_WB_Gain->min_rgain,  p_WB_Gain->min_bgain);
-	
-#elif  (USE_SENSOR_NAME == SENSOR_GC1004)
-    p_WB_Gain =gc1004_awb_r_b_gain_boundary();    
-  //  DBG_PRINT("max_rgain= %d, max_bgain= %d,min_rgain= %d, min_bgain= %d\r\n", p_WB_Gain->max_rgain, p_WB_Gain->max_bgain,  p_WB_Gain->min_rgain,  p_WB_Gain->min_bgain);    
-    gp_cdsp_awb_set_r_b_gain_boundary(awb, p_WB_Gain->max_rgain, p_WB_Gain->max_bgain,  p_WB_Gain->min_rgain,  p_WB_Gain->min_bgain);
-	
-#elif  (USE_SENSOR_NAME == SENSOR_OV9712)
-    p_WB_Gain =ov9712_awb_r_b_gain_boundary();    
-  //  DBG_PRINT("max_rgain= %d, max_bgain= %d,min_rgain= %d, min_bgain= %d\r\n", p_WB_Gain->max_rgain, p_WB_Gain->max_bgain,  p_WB_Gain->min_rgain,  p_WB_Gain->min_bgain);    
-    gp_cdsp_awb_set_r_b_gain_boundary(awb, p_WB_Gain->max_rgain, p_WB_Gain->max_bgain,  p_WB_Gain->min_rgain,  p_WB_Gain->min_bgain);
+	//gp_cdsp_awb_set_r_b_gain_boundary(awb, 95, 120, 60, 60);
+   p_WB_Gain =gc1004_awb_r_b_gain_boundary();
+   gp_cdsp_awb_set_r_b_gain_boundary(awb, p_WB_Gain->max_rgain, p_WB_Gain->max_bgain,  p_WB_Gain->min_rgain,  p_WB_Gain->min_bgain);
 
-#endif	
-	*/
 	
 	//H22_get_exposure_time(&seInfo);
 	
@@ -1560,7 +1614,7 @@ INT32U gp_ae_awb_process(void)
 		}
 	
 		CdspDev->ae_awb_flag = 0;
-		CdspDev->ae_awb_flag |= (CDSP_LUM_STATUS);
+		CdspDev->ae_awb_flag = CDSP_LUM_STATUS + CDSP_AEAWB_CTRL_EN;
 		ae_switch_flag = 3;
 		
 #if (USE_SENSOR_NAME == SENSOR_SOI_H22)
@@ -1606,6 +1660,7 @@ INT32U gp_ae_awb_process(void)
 		awb_frame=0;
 		ae_frame_thr = 3;
 
+		CdspDev->ae_awb_flag &= (~CDSP_AEAWB_CTRL_EN);
 		return 0;
 	}
 	else if(CdspDev->getSensorInfo == 0x21)
@@ -1615,6 +1670,8 @@ INT32U gp_ae_awb_process(void)
 		//DBG_PRINT("0: AE/AWB process, flag = 0x%x\r\n", CdspDev->ae_awb_flag);
 
 			//+++ AE process start
+		if((CdspDev->ae_awb_flag & CDSP_AEAWB_CTRL_EN) != 0)
+		{
 			if((CdspDev->ae_awb_flag & CDSP_AE_CTRL_EN) != 0)
 			{			
 				ae_frame++;
@@ -1623,6 +1680,8 @@ INT32U gp_ae_awb_process(void)
 					int ret;
 					int i;
 					unsigned int hist_lo, hist_hi;
+					
+					hwCdsp_EnableAE(DISABLE, ENABLE);
 				
 					ae_frame = 0;	
 					//DBG_PRINT("1: AE/AWB process, flag = 0x%x\r\n", CdspDev->ae_awb_flag);				
@@ -1669,6 +1728,9 @@ INT32U gp_ae_awb_process(void)
 							DBG_PRINT(" %d,",p_3a_result->ae_win[i]);
 						}
 						DBG_PRINT("\r\n");	*/		
+						
+						hist_low1 = hist_lo;	
+						hist_high1 = hist_hi;	
 						
 						gp_cdsp_ae_comb_win(ae, CdspDev->ae_win_tmp, p_3a_result->ae_win, ae_switch_flag);						
 						ae_switch_flag = 2;
@@ -1730,7 +1792,8 @@ INT32U gp_ae_awb_process(void)
 						}
 						DBG_PRINT("\r\n");*/
 						
-						
+						hist_hi = (hist_hi + hist_high1) >> 1;
+						hist_lo = (hist_lo + hist_low1) >> 1;
 						ret = gp_cdsp_ae_calc_exp(ae,ae_win_t, &seInfo, hist_hi, hist_lo);		
 						seInfo.ae_ev_idx = gp_cdsp_ae_get_result_ev(ae);				
 					}
@@ -1753,14 +1816,14 @@ INT32U gp_ae_awb_process(void)
 					else ae_frame_thr = 3;
 					
 									
-					//DBG_PRINT("\r\nGet lum = 0x%x, ev_idx =%d\r\n", gp_cdsp_ae_get_result_lum(ae), seInfo.ae_ev_idx);
+					//DBG_PRINT("\r\nGet lum = 0x%x\r\n", gp_cdsp_ae_get_result_lum(ae));
 					if(seInfo.ae_ev_idx != 0)
 					{
 						int current_ev_idx = seInfo.sensor_ev_idx;
 						int night_ev_idx = seInfo.night_ev_idx;
 						
 						gp_memcpy((INT8S *)&seInfo2, (INT8S *)&seInfo, sizeof(sensor_exposure_t));
-						CdspDev->ae_ret = ret;
+						CdspDev->ae_ret = AE_CHANGE;
 						
 																		
 										
@@ -1778,7 +1841,7 @@ INT32U gp_ae_awb_process(void)
 									ae_switch_flag = 0;	// for night
 									CdspDev->low_lum_switch_cnt = 0;
 									CdspDev->high_lum_switch_cnt = 0;
-									denoise_level = NEW_DENOISE_ONLY;
+									denoise_level = NEW_DENOISE_ONLY;//HYBRID_DENOISE_ONLY;
 									
 									CdspDev->ae_awb_flag &=( ~(CDSP_LUM_STATUS | CDSP_HIGH_LUM | CDSP_LOW_LUM));
 									CdspDev->ae_awb_flag |= (CDSP_LUM_STATUS | CDSP_LOW_LUM);
@@ -1792,8 +1855,7 @@ INT32U gp_ae_awb_process(void)
 						else if(current_ev_idx > sat_yuv_thr[0] && current_ev_idx < sat_yuv_thr[3])
 						{							
 							ae_ev = 4;
-							if(denoise_level != NEW_DENOISE_ONLY)
-							//if(denoise_level != HYBRID_DENOISE_ONLY)							
+							if(denoise_level != HYBRID_DENOISE_ONLY)
 							{
 								CdspDev->low_lum_switch_cnt++;							
 								if(CdspDev->low_lum_switch_cnt >= 8)
@@ -1802,7 +1864,7 @@ INT32U gp_ae_awb_process(void)
 									ae_switch_flag = 0;	// for night
 									CdspDev->low_lum_switch_cnt = 0;
 									CdspDev->high_lum_switch_cnt = 0;
-									denoise_level = NEW_DENOISE_ONLY;//HYBRID_DENOISE_ONLY;
+									denoise_level = HYBRID_DENOISE_ONLY;
 									
 									CdspDev->ae_awb_flag &=( ~(CDSP_LUM_STATUS | CDSP_HIGH_LUM | CDSP_LOW_LUM));
 									CdspDev->ae_awb_flag |= (CDSP_LUM_STATUS | CDSP_LOW_LUM);
@@ -1828,7 +1890,7 @@ INT32U gp_ae_awb_process(void)
 									CdspDev->low_lum_switch_cnt = 0;
 									
 									CdspDev->ae_awb_flag &= (~(CDSP_LUM_STATUS | CDSP_HIGH_LUM | CDSP_LOW_LUM));
-									CdspDev->ae_awb_flag |= (CDSP_LUM_STATUS | CDSP_HIGH_LUM);
+									CdspDev->ae_awb_flag |= (CDSP_LUM_STATUS | CDSP_HIGH_LUM);									
 									//DBG_PRINT("high lum\n\r");								
 								}	
 							}
@@ -1848,28 +1910,24 @@ INT32U gp_ae_awb_process(void)
 							CdspDev->sat_contr_idx = 3;
 							CdspDev->ae_awb_flag |= CDSP_SAT_SWITCH;
 							//DBG_PRINT("sat_contr_idx = %d\r\n", CdspDev->sat_contr_idx);
-							//DBG_PRINT("sat_contr_idx = %d, ae_ev = %d, current_ev_idx = %d\r\n", CdspDev->sat_contr_idx, ae_ev, current_ev_idx);
 						}
 						else if(current_ev_idx < sat_yuv_thr[3] && current_ev_idx >= sat_yuv_thr[2] && CdspDev->sat_contr_idx != 2)
 						{							
 							CdspDev->sat_contr_idx = 2;
 							CdspDev->ae_awb_flag |= CDSP_SAT_SWITCH;
 							//DBG_PRINT("sat_contr_idx = %d\r\n", CdspDev->sat_contr_idx);
-							//DBG_PRINT("sat_contr_idx = %d, ae_ev = %d, current_ev_idx = %d\r\n", CdspDev->sat_contr_idx, ae_ev, current_ev_idx);
 						}
 						else if(current_ev_idx < sat_yuv_thr[2] && current_ev_idx >= sat_yuv_thr[1] && CdspDev->sat_contr_idx != 1)
 						{							
 							CdspDev->sat_contr_idx = 1;
 							CdspDev->ae_awb_flag |= CDSP_SAT_SWITCH;
 							//DBG_PRINT("sat_contr_idx = %d\r\n", CdspDev->sat_contr_idx);
-							//DBG_PRINT("sat_contr_idx = %d, ae_ev = %d, current_ev_idx = %d\r\n", CdspDev->sat_contr_idx, ae_ev, current_ev_idx);
 						}
 						else if(current_ev_idx < sat_yuv_thr[1] && CdspDev->sat_contr_idx != 0)
 						{							
 							CdspDev->sat_contr_idx = 0;
 							CdspDev->ae_awb_flag |= CDSP_SAT_SWITCH;
 							//DBG_PRINT("sat_contr_idx = %d\r\n", CdspDev->sat_contr_idx);
-						//	DBG_PRINT("sat_contr_idx = %d, ae_ev = %d, current_ev_idx = %d\r\n", CdspDev->sat_contr_idx, ae_ev, current_ev_idx);
 						}
 						else if(current_ev_idx < sat_yuv_thr[0] && CdspDev->sat_contr_idx != -1)
 						{
@@ -1885,6 +1943,7 @@ INT32U gp_ae_awb_process(void)
 					else
 						ae_stable = 1;	
 #endif
+                     hwCdsp_EnableAE(ENABLE, DISABLE);
 					//DBG_PRINT("ae_awb_flag = 0x%x\r\n", CdspDev->ae_awb_flag);
 				}
 
@@ -1904,6 +1963,7 @@ INT32U gp_ae_awb_process(void)
 				{
 					//gpCdspWbGain2_t wb_gain2;
 					int ret, lum;
+					hwCdsp_EnableAWB(DISABLE, ENABLE);
 									
 					awb_frame = 0;
 					
@@ -1940,7 +2000,7 @@ INT32U gp_ae_awb_process(void)
 						if(CdspDev->awb_low_lum_cnt >= 3)
 						{
 							// could be night)
-							gp_cdsp_awb_reset_wb_gain(awb, 40, CdspDev->sensor_cdsp.r_b_gain);
+							gp_cdsp_awb_reset_wb_gain(awb, 45, CdspDev->sensor_cdsp.r_b_gain);
 							
 							
 							wb_gain.bgain = gp_cdsp_awb_get_b_gain(awb);
@@ -1949,7 +2009,7 @@ INT32U gp_ae_awb_process(void)
 							CdspDev->ae_awb_flag |= CDSP_AWB_SET_GAIN;
 							
 							//DBG_PRINT("AWB low light\r\n");
-							CdspDev->awb_low_lum_cnt = -512;
+							CdspDev->awb_low_lum_cnt = 0x80000000;
 						}
 					}
 					else if(ret != AWB_FAIL && ret != AWB_RET && CdspDev->awb_low_lum_cnt > 0)
@@ -1991,8 +2051,11 @@ INT32U gp_ae_awb_process(void)
 						
 								gp_cdsp_awb_set_ct_offset(awb, NIGHT_WB_OFFSET); // +: warm,   -: cold , +10~-10	
 							}
-							//else if(p_seInfo->time < CdspDev->sensor_time_thr)
-							else if(seInfo.time < CdspDev->sensor_time_thr)
+							else if(ret == AWB_FAIL)
+							{
+								awbmode = AWB_AUTO_CVR;
+							}
+							else if(seInfo.sensor_ev_idx < seInfo.daylight_ev_idx)
 							{
 								//DBG_PRINT("AWB Daylight\r\n");
 								awbmode = AWB_AUTO_CVR_DAYLIGHT;
@@ -2032,13 +2095,16 @@ INT32U gp_ae_awb_process(void)
 					//DBG_PRINT("rgain2 = 0x%x, bgain2 = 0x%x\r\n", wb_gain2.rgain2 , wb_gain2.bgain2);
 					
 	#endif				
+					hwCdsp_EnableAWB(ENABLE, DISABLE);	
 				}
 
 				CdspDev->ae_awb_flag &= (~CDSP_AWB_CTRL_EN);
 				//DBG_PRINT("AWB process, flag = 0x%x\r\n", CdspDev->ae_awb_flag);
 			}
 			//DBG_PRINT("3: AE/AWB process, flag = 0x%x\r\n", CdspDev->ae_awb_flag);
-	
+			CdspDev->ae_awb_flag &= (~CDSP_AEAWB_CTRL_EN);
+		}
+
 		//DBG_PRINT("\r\n\r\n=========== AE & AWB Process Stop =========\r\n\r\n");
 
 		return 0;
@@ -2120,21 +2186,22 @@ Save RAW Data Function
 void save_raw10(INT32U g_frame_addr,INT32U capture_mode)
 {
 
-	capture_mode = LENSCMP;//0x10;//0x11//0x12
+	capture_mode = LUTGAMMA;//0x10;//0x11//0x12
 	
 	hwCdsp_DataSource(SDRAM_INPUT);	//Sensor data input
 	
-	hwCdsp_SetInt(0,CDSP_INT_ALL); //off all Interupt
+	hwCdsp_SetInt(1,CDSP_INT_ALL); //off all Interupt
 	/* switch capture mode*/
 	//hwCdsp_SetRawPath(raw_mode, cap_mode, yuv_mode);   
 
 	//Set RAW Buffer Address
 	hwCdsp_SetRaw10Buff(1280, 720, 0, g_frame_addr);
 	//hwCdsp_SetRaw10Buff(width, height, 0, g_frame_addr[1]);
-	hwIsp_LenCmp(DISABLE, 0);
+	//hwIsp_LenCmp(DISABLE, 0);
+	hwIsp_EnableDenoise(DISABLE);
 	hwCdsp_SetSRAM(ENABLE, 0xA0);
 	hwCdsp_EnableClamp(ENABLE, 1280);
-	
+	hwIsp_LinCorr_Enable(DISABLE);
 	//read back 
 	hwCdsp_SetReadBackSize10(0x0, 0x0, 1280, 720);
 	//hwCdsp_SetReadBackSize10(0x08, 0x0, width, height);
@@ -2142,15 +2209,36 @@ void save_raw10(INT32U g_frame_addr,INT32U capture_mode)
 	
 	switch (capture_mode)
 	{
+		case PURERAW:
+			hwIsp_LinCorr_Enable(DISABLE);
+			hwIsp_LenCmp(DISABLE, 0);
+	 		hwCdsp_SetRawPath(0x01, 0x0, 0x0);   //0x240 = 0x01;	//10 bit to 16bit, From LensCmp
+		break;
+		
+		case LINCORR:
+			hwIsp_LinCorr_Enable(DISABLE);
+			hwIsp_LenCmp(DISABLE, 0);
+	 		hwCdsp_SetRawPath(0x01, 0x0, 0x0);   //0x240 = 0x01;	//10 bit to 16bit, From LensCmp
+		break;
+		
 		case LENSCMP:
+			hwIsp_LinCorr_Enable(DISABLE);
+			hwIsp_LenCmp(ENABLE, 15);
 	 		hwCdsp_SetRawPath(0x01, 0x0, 0x0);   //0x240 = 0x01;	//10 bit to 16bit, From LensCmp
 		break;
  	
 		case WBGAIN:
+			hwIsp_LinCorr_Enable(DISABLE);
+			hwIsp_LenCmp(ENABLE, 15);
+			hwCdsp_EnableWbGain(ENABLE);
 			hwCdsp_SetRawPath(0x03, 0x0, 0x0);   //0x240 = 0x03;	//10 bit to 16bit, From WBGain
 		break;
 
 		case LUTGAMMA:
+			hwIsp_LinCorr_Enable(DISABLE);
+			hwIsp_LenCmp(ENABLE, 15);
+			hwCdsp_EnableWbGain(ENABLE);
+			hwCdsp_EnableLutGamma(ENABLE);
 			hwCdsp_SetRawPath(0x05, 0x0, 0x0);   //0x240 = 0x05	//10 bit to 16bit, From LutGamma
 		break;
 
@@ -2160,6 +2248,8 @@ void save_raw10(INT32U g_frame_addr,INT32U capture_mode)
 	}
 	
 	DBG_PRINT("Getting Sensor Data\r\n");		//imgsorce from front
+
+	hwCdsp_DataSource(MIPI_INPUT);
 
 }
 
@@ -2178,12 +2268,27 @@ void cdsp_yuyv_restart(INT32U g_frame_addr)
 #endif
 
 
+
+void gp_cdsp_edge_level_init(void)
+{
+	int step;
+
+	edge_level[0] = DAYLIGHT_EDGE;
+	edge_level[3] = NIGHT_EDGE;
+
+	step = (DAYLIGHT_EDGE - NIGHT_EDGE + 1) / 3;
+
+	edge_level[1] = edge_level[0] - step;
+	edge_level[2] = edge_level[3] + step;	
+}
+
+
 void gp_cdsp_sat_contrast_init(void)
 {
 	int step;
 	
 	// y offset
-	step = (abs(DAYLIGHT_HUE_Y_OFFSET - NIGHT_HUE_Y_OFFSET) + 2) >> 2;
+	step = (abs(DAYLIGHT_HUE_Y_OFFSET - NIGHT_HUE_Y_OFFSET) + 1) / 3;
 	if(DAYLIGHT_HUE_Y_OFFSET > NIGHT_HUE_Y_OFFSET) step = -step;
 	
 	sat_yuv_level[0][0] = DAYLIGHT_HUE_Y_OFFSET;
@@ -2192,7 +2297,7 @@ void gp_cdsp_sat_contrast_init(void)
 	sat_yuv_level[3][0] = NIGHT_HUE_Y_OFFSET;
 	
 	// u offset
-	step = (abs(DAYLIGHT_HUE_U_OFFSET - NIGHT_HUE_U_OFFSET) + 2) >> 2;
+	step = (abs(DAYLIGHT_HUE_U_OFFSET - NIGHT_HUE_U_OFFSET) + 1) / 3;
 	if(DAYLIGHT_HUE_U_OFFSET > NIGHT_HUE_U_OFFSET) step = -step;
 	
 	sat_yuv_level[0][1] = DAYLIGHT_HUE_U_OFFSET;
@@ -2201,7 +2306,7 @@ void gp_cdsp_sat_contrast_init(void)
 	sat_yuv_level[3][1] = NIGHT_HUE_U_OFFSET;
 	
 	// v offset
-	step = (abs(DAYLIGHT_HUE_V_OFFSET - NIGHT_HUE_V_OFFSET) + 2) >> 2;
+	step = (abs(DAYLIGHT_HUE_V_OFFSET - NIGHT_HUE_V_OFFSET) + 1) / 3;
 	if(DAYLIGHT_HUE_V_OFFSET > NIGHT_HUE_V_OFFSET) step = -step;
 	
 	sat_yuv_level[0][2] = DAYLIGHT_HUE_V_OFFSET;
@@ -2211,7 +2316,7 @@ void gp_cdsp_sat_contrast_init(void)
 	
 	
 	// y scale
-	step = (abs(DAYLIGHT_SAT_Y_SCALE - NIGHT_SAT_Y_SCALE) + 2) >> 2;
+	step = (abs(DAYLIGHT_SAT_Y_SCALE - NIGHT_SAT_Y_SCALE) + 1) / 3;
 	if(DAYLIGHT_SAT_Y_SCALE > NIGHT_SAT_Y_SCALE) step = -step;
 	
 	sat_yuv_level[0][3] = DAYLIGHT_SAT_Y_SCALE;
@@ -2220,7 +2325,7 @@ void gp_cdsp_sat_contrast_init(void)
 	sat_yuv_level[3][3] = NIGHT_SAT_Y_SCALE;
 	
 	// u scale
-	step = (abs(DAYLIGHT_SAT_U_SCALE - NIGHT_SAT_U_SCALE)+ 2) >> 2;
+	step = (abs(DAYLIGHT_SAT_U_SCALE - NIGHT_SAT_U_SCALE)+ 1) / 3;
 	if(DAYLIGHT_SAT_U_SCALE > NIGHT_SAT_U_SCALE) step = -step;
 	
 	sat_yuv_level[0][4] = DAYLIGHT_SAT_U_SCALE;
@@ -2229,7 +2334,7 @@ void gp_cdsp_sat_contrast_init(void)
 	sat_yuv_level[3][4] = NIGHT_SAT_U_SCALE;
 	
 	// v scale
-	step = (abs(DAYLIGHT_SAT_V_SCALE - NIGHT_SAT_V_SCALE) + 2) >> 2;
+	step = (abs(DAYLIGHT_SAT_V_SCALE - NIGHT_SAT_V_SCALE) + 1) / 3;
 	if(DAYLIGHT_SAT_V_SCALE > NIGHT_SAT_V_SCALE) step = -step;
 	
 	sat_yuv_level[0][5] = DAYLIGHT_SAT_V_SCALE;
@@ -2250,7 +2355,7 @@ void gp_cdsp_sat_contrast_init(void)
 	sat_yuv_thr[0] = gc1004_get_night_ev_idx();	
 #endif
 	step -= sat_yuv_thr[0];
-	step = (step + 2) >> 2;		
+	step = (step + 1) / 3;	
 	sat_yuv_thr[1] = sat_yuv_thr[0] + step;
 	sat_yuv_thr[2] = sat_yuv_thr[3] - step;
 	
@@ -2345,7 +2450,7 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	hwCdsp_EnableBadPixel(ENABLE, 1, 1);
 
 	/*--- YUV Lens compesation ---*/
-	hwCdsp_EnableLensCmp(DISABLE, 0);
+	hwCdsp_EnableLensCmp(DISABLE, 0);	
 	//disable when use YUV data input
 	hwCdsp_SetLensCmpPath(0);
 #if CDSP_DEBUG == 1
@@ -2360,8 +2465,6 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	/*--Color matrix --*/	
 	hwCdsp_EnableColorMatrix(DISABLE);	
 #else
-       /*---ISP Linearity Correction---*/
-	//hwIsp_LinCorr_Enable(ENABLE);
 	/*--- ISP LSC ---*/
 	//hwIsp_LenCmp(ENABLE, 16);
 	hwIsp_LenCmp(ENABLE, 19);
@@ -2372,7 +2475,7 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	hwCdsp_EnableLutGamma(ENABLE);
 
 	/*--Color matrix --*/	
-	hwCdsp_EnableColorMatrix(ENABLE);
+	hwCdsp_EnableColorMatrix(ENABLE);	
 #endif
 
 	/*--Edge--*/
@@ -2386,7 +2489,7 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	IspHybridRaw.DPCn = 1;			
 	IspHybridRaw.DefectPixelSel = 0;
 	IspHybridRaw.DefectPixelEnable = DISABLE;
-	IspHybridRaw.CrosstalkEnable = DISABLE; 
+	IspHybridRaw.CrosstalkEnable =  DISABLE; 
 
 	IspHybridRaw.DPCth1 = 55; //55 -> 66, weak -> strong
    	IspHybridRaw.DPCth2 = 76; //76 -> 55 -> 43, weak -> medium -> strong
@@ -2490,9 +2593,11 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	#else
 	hwCdsp_SetRawDataFormat(2);   //BGGR
 	#endif
-	hwFront_SetFrameSize(0xD8, 0x02, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//pll 38.4,BGGR	
+	hwFront_SetFrameSize(0xD8, 0x02, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//pll 38.4,BGGR
+	
 	sensor_SOi_h22_init(gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
 #elif (USE_SENSOR_NAME == SENSOR_GC1004)
+#if 0
 	hwCdsp_SetRawDataFormat(2);			//2:BGGR, 1:RGGB
 	#if SENSOR_FLIP
 	hwFront_SetFrameSize(0x07, 0x02, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//BGGR
@@ -2500,7 +2605,16 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	//hwFront_SetFrameSize(0x07, 0x02, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//BGGR
 	hwFront_SetFrameSize(0x08, 0x01, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//BGGR
 	#endif	
-	sensor_gc1004_init(gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	
+	sensor_gc1004_init(gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
+#else
+	hwCdsp_SetRawDataFormat(2); 		//BGGR
+	#if SENSOR_FLIP
+		hwFront_SetFrameSize(0x0C, 0x01, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//BGGR
+	#else
+		hwFront_SetFrameSize(0x07, 0x02, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//BGGR
+	#endif
+		sensor_gc1004_init(gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
+#endif	
 #elif(USE_SENSOR_NAME == SENSOR_OV9712)
 	hwCdsp_SetRawDataFormat(2); 		//BGGR
 	hwFront_SetFrameSize(0x190, 0x02, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);	//RGGB
@@ -2517,10 +2631,11 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	gp_cdsp_set_aeawb_window(gpSENSOR_WIDTH, gpSENSOR_HEIGHT,TARGET_Y);
 
 	gp_cdsp_set_histgm(ENABLE, 200, 25);	
-	gp_cdsp_set_saturation();		//???, ????
+	gp_cdsp_set_saturation();
 	hwCdsp_SetUVScale(0, uv_div[0][0], uv_div[0][1], uv_div[0][2], uv_div[0][3], uv_div[0][4], uv_div[0][5]);
 	
 	gp_cdsp_sat_contrast_init();
+	gp_cdsp_edge_level_init();
 	
 {
 	INT32U temp;
@@ -2542,9 +2657,9 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 	hwIsp_SetImageSize(1280, 720);
 	hwCdsp_EnableNewDenoise(ENABLE);
 	hwIsp_EnableDenoise(DISABLE);
+	//gp_cdsp_set_ev_val(4);
 	//hwCdsp_SetYuvHAvg(3,1,2,2);
 #endif
-
 #endif
 	//hwCdsp_DataSource(FRONT_INPUT);
 	CdspDev->getSensorInfo |= 0x320;
@@ -2559,7 +2674,9 @@ void gp_isp_start(INT32U dummy_addr,INT32U gpSENSOR_WIDTH, INT32U gpSENSOR_HEIGH
 		 
 	R_TFT_CTRL |= 0x1; 	 // TFT ON
 
-	//save_raw10(0x80500000, LENSCMP);
+	//hwCdsp_SetYuvBuffA(read_width, read_height,dummy_addr);
+	
+	//save_raw10(0x80400000, LENSCMP);
 	while(1);
 #endif	
 }
@@ -2664,7 +2781,7 @@ void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR
 	hwCdsp_EnableColorMatrix(DISABLE);	
 #else
 	/*--- ISP LSC ---*/
-	hwIsp_LenCmp(ENABLE, 19); //lx add
+	hwIsp_LenCmp(ENABLE, 15); //lx add
 	/*--- wb gain config ---*/
 	gp_cdsp_set_wb_gain(ENABLE, ENABLE);
 
@@ -2711,6 +2828,15 @@ void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR
 	IspHybridRaw.DenoiseW2 = 2; 
 	IspHybridRaw.DenoiseW3 = 3; 
 //#endif
+/*
+	IspHybridRaw.DenoiseT1 = 8; 
+	IspHybridRaw.DenoiseT2 = 16; 
+	IspHybridRaw.DenoiseT3 = 32; 
+	IspHybridRaw.DenoiseT4 = 48; 
+	IspHybridRaw.DenoiseW1 = 1; 
+	IspHybridRaw.DenoiseW2 = 2; 
+	IspHybridRaw.DenoiseW3 = 3; 
+*/
 
 	IspHybridRaw.CrosstalkT1 = 0; 
 	IspHybridRaw.CrosstalkT2 = 0; 
@@ -2724,7 +2850,7 @@ void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR
 	gp_isp_set_hybridraw(&IspHybridRaw);
 #if 1
 	//Enable raw interpolution
-	hwCdsp_SetExtLine(ENABLE, gpSENSOR_WIDTH, 0x28);
+	hwCdsp_SetExtLine(ENABLE, gpSENSOR_WIDTH, 0xF0);
 	//hwCdsp_IntplThrSet(0x10, 0xF0);
 	//hwCdsp_IntplThrSet(16, 240); // same as GP12B
 	hwCdsp_IntplThrSet(24, 240); //lx change
@@ -2794,6 +2920,8 @@ void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR
 	hwFront_SetMipiFrameSize(0, 0, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
 	Sensor_Start(DRV_OV5642, OV5642_MIPI_GRBG);
 #elif (USE_SENSOR_NAME == SENSOR_GC1004)
+
+ #if 0
 	hwCdsp_SetRawDataFormat(2);			//BGGR
 	#if SENSOR_FLIP
 	hwFront_SetMipiFrameSize(0xB, 0, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
@@ -2801,6 +2929,18 @@ void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR
 	hwFront_SetMipiFrameSize(0xC, 0x2, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
 	#endif
 	sensor_gc1004_init(gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
+ #else
+	
+	#if SENSOR_FLIP
+	hwCdsp_SetRawDataFormat(1);	
+	hwFront_SetMipiFrameSize(0xa, 0, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
+	#else
+	hwCdsp_SetRawDataFormat(2);			//BGGR
+	//hwFront_SetMipiFrameSize(0x6, 2, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
+	hwFront_SetMipiFrameSize(0x6, 2, gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
+	#endif
+	sensor_gc1004_init(gpSENSOR_WIDTH, gpSENSOR_HEIGHT);
+ #endif
 #else	
 	DBG_PRINT("NO Sensor Init !\r\n");
 #endif
@@ -2816,6 +2956,7 @@ void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR
 	hwCdsp_SetUVScale(0, uv_div[0][0], uv_div[0][1], uv_div[0][2], uv_div[0][3], uv_div[0][4], uv_div[0][5]);
 	
 	gp_cdsp_sat_contrast_init();
+	gp_cdsp_edge_level_init();
 	
 {
 	INT32U temp;
@@ -2836,7 +2977,7 @@ void gp_mipi_isp_start(INT32U dummy_addr, INT32U gpSENSOR_WIDTH, INT32U gpSENSOR
 	//hwCdsp_DataSource(FRONT_INPUT);
 
 	DBG_PRINT("\r\n%s\r\n", gp_cdsp_aeawb_get_version());
-	DBG_PRINT("\r\n CDSP START ! \r\n");
+	DBG_PRINT("\r\n CDSP mipi START ! \r\n");
 	CdspDev->getSensorInfo |= 0x320;
 		
 #if CDSP_DEBUG == 1// Initiate TFT controller for test	
@@ -2894,3 +3035,16 @@ void gp_cdsp_target_lum_set(INT16S target_y){
         // set Target Lum                 
         gp_cdsp_ae_set_target_lum(CdspDev->ae_workmem, target_y); 
 } 
+
+ void DenoiseLevelSetting(INT8U T1,INT8U T2,INT8U T3,INT8U T4,INT8U W1,INT8U W2,INT8U W3)
+  {
+    IspHybridRaw.DenoiseT1 = T1; 
+	IspHybridRaw.DenoiseT2 = T2; 
+	IspHybridRaw.DenoiseT3 = T3; 
+	IspHybridRaw.DenoiseT4 = T4; 
+	IspHybridRaw.DenoiseW1 = W1; 
+	IspHybridRaw.DenoiseW2 = W2; 
+	IspHybridRaw.DenoiseW3 = W3;
+    hwIsp_DenoiseThold(IspHybridRaw.DenoiseT1, IspHybridRaw.DenoiseT2, IspHybridRaw.DenoiseT3, IspHybridRaw.DenoiseT4);
+	hwIsp_DenoiseWeight(IspHybridRaw.DenoiseW1, IspHybridRaw.DenoiseW2, IspHybridRaw.DenoiseW3);
+  }

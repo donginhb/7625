@@ -1,9 +1,8 @@
 #ifndef __AEAWB_H__
 #define __AEAWB_H__
 
-#define BODY_GP15B		1
 
-#if BODY_GP15B
+#if 1//BODY_GP15B
 // for GP15B
 
 #ifndef sensor_exposure_t
@@ -20,11 +19,13 @@ typedef struct {
 	int daylight_ev_idx;	// daylight time
 	int night_ev_idx;		// night time
 	int max_ev_idx;
+	int total_ev_idx;
 
 	// ev index
 	int sensor_ev_idx;
 	int ae_ev_idx;
-	
+	int raw_mode_idx;	
+
 	int userISO;
 	
 	int set_color_tmp;
@@ -311,7 +312,7 @@ void gp_cdsp_ae_set_sensor_exp_time(unsigned char *_ae, sensor_exposure_t *seinf
 // Return: 1: night,  0: not night
 //=========================================================================
 int gp_cdsp_ae_is_night(void *_ae);
-
+int gp_cdsp_ae_is_night_mode(void *_ae);
 
 
 //=========================================================================

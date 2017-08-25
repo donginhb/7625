@@ -1085,10 +1085,6 @@ void hwCdsp_LinCorr_ReadTable(
 	INT32U len
 );
 
-void hwIsp_LinCorr_Table(
-	INT8U *pLinCorrTable
-);
-
 void hwIsp_LinCorr_Enable(
 	INT8U lincorr_en
 );
@@ -1179,7 +1175,7 @@ void CDSPFB_CLK_Setting(void);
 void SdramIF_Setting(unsigned char front_type);
 void SensorIF_Setting(unsigned char front_type);
 void CDSP_SensorIF_CLK(unsigned char front_type);
-void MipiIF_Setting(INT16U mipi_type, INT32U width, INT32U height);
+void MipiIF_Setting(unsigned char mipi_type, unsigned int width, unsigned int height);
 
 void drvl1_cdsp_init(INT32U SNR_WIDTH, INT32U SNR_HEIGHT);
 void drvl1_cdsp_stop(void);

@@ -67,7 +67,7 @@ void hwFront_SetInputFormat(
 		case MIPI_RAW10:
 			R_CDSP_TG_ZERO = 0x1FF;
 			R_CDSP_FRONT_GCLK |= 0x3F;
-			R_CDSP_MIPI_CTRL = 0x0000;
+			R_CDSP_MIPI_CTRL = 0x0002;
 			R_CDSP_DATA_FORMAT &= ~0x10;
 			break;
 		case MIPI_UYVY:

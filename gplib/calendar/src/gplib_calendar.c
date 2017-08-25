@@ -26,7 +26,7 @@
 #define JAN_31TH_2014        2456689
 #define JAN_01TH_2015        2457024
 #define JAN_01TH_2016        2457389
-#define JAN_01TH_2017        24577556         
+#define JAN_01TH_2017        2457755        
 INT32U LAST_JULIAN_DATE = JAN_01TH_2017;
 
 void     (*jd_store)(INT32U);
