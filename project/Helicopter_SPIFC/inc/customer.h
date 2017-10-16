@@ -226,11 +226,11 @@
 #define sensor_format			OV9712_RAW
 #endif
 
-#define SENSOR_FLIP 			0	
+#define SENSOR_FLIP 			1//0	
 #define USE_G_SENSOR_NAME		G_SENSOR_DA380	
 #define USE_G_SENSOR_ACTIVE 	0
 #define CPU_DRAW_TIME_STAMP_BLACK_EDGE 0
-#define USE_IOKEY_NO			2
+#define USE_IOKEY_NO			1//2
 #define USE_ADKEY_NO			1
 #define KEY_TYPE				KEY_TYPE10
 #define PWR_KEY_TYPE			READ_FROM_PIN
@@ -277,7 +277,7 @@
 #define CDSP_IQ 				GPCV1248_JVIN_V1_0//GPCV1248_C6_V2_0	
 #define PRODUCT_NUM 			7625
 #define PRODUCT_DATA			20170822
-#define PROGRAM_VERSION_NUM 	32//80
+#define PROGRAM_VERSION_NUM 	34//80
 
 
 

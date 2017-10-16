@@ -52,7 +52,8 @@ void task_peripheral_handling_init(void)
 
 
 INT8U			card_space_less_flag = 0;
-
+extern volatile INT8U DayLight_mode;
+extern INT8S			video_record_sts;
 
 void task_peripheral_handling_entry(void * para)
 {
@@ -352,7 +353,22 @@ void task_peripheral_handling_entry(void * para)
 						//DBG_PRINT("*");
 					}
 				}
-
+				
+				if (video_record_sts & 0x06)
+				{
+					if (DayLight_mode)
+					{
+						gpio_write_io(IR_CTRL, DATA_HIGH);
+					}
+					else 
+					{
+						gpio_write_io(IR_CTRL, DATA_LOW);
+					}
+				}
+				else 
+				{
+					gpio_write_io(IR_CTRL, DATA_LOW);
+				}
 				break;
 
 #endif

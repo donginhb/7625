@@ -1,0 +1,38 @@
+
+< 17-09-05 16:30:03 >==============================================
+Device is Inserted On Driver : [Hub1 Port8] [VER:0, SN:6&36182d3c&0#{53]
+
+< 17-09-05 16:30:37 >==============================================
+Device is Inserted On Driver : [Hub1 Port8] [VER:0, SN:6&36182d3c&0#{53]
+
+< 17-09-05 16:23:26 >==============================================
+Device is Inserted On Driver : [Hub1 Port8] [VER:0, SN:6&36182d3c&0#{53]
+
+< 17-09-05 16:34:28 >==============================================
+Device is Inserted On Driver : [Hub1 Port8] [VER:0, SN:6&36182d3c&0#{53]
+
+< 17-09-05 16:40:09 >==============================================
+Device is Inserted On Driver : [Hub1 Port8] [VER:0, SN:6&36182d3c&0#{53]
+
+< 17-09-05 17:29:00 >==============================================
+Device is Inserted On Driver : [Hub1 Port7] [VER:0, SN:6&22245a72&0#{53]
+   Begin the USB Task...
+   Step 1 disable...
+   Begin Step 2... Action: Write, Chip: RAM, Address: 0xF8002000, File: F:\work\item\7625\v032\program\writer\USBMassProductionTool/code/gp15b_ispbin.bin
+   Step 2 - Start Time : 2017/09/05 PM 05:29:02:829
+   Step 2 - End Time : 2017/09/05 PM 05:29:02:837
+   Step 2 ok! Spent Time: 0.15s
+   Begin Step 3... Action: Jump to Function, Chip: RAM, Address: 0xF8002000
+   Step 3 - Start Time : 2017/09/05 PM 05:29:02:839
+   Step 3 - End Time : 2017/09/05 PM 05:29:02:839
+   Step 3 ok! Spent Time: 0.0s
+   Begin Step 4... Action: Erase, Chip: SPI Nor Flash, Address: 0x0000, Length: 40
+   Step 4 - Start Time : 2017/09/05 PM 05:29:02:840
+   Step 4 - End Time : 2017/09/05 PM 05:29:31:400
+   Step 4 ok! Spent Time: 28.564s
+   Begin Step 5... Action: Write, Chip: SPI Nor Flash, Address: 0x0000, File: F:\work\item\7625\v032\program\writer\USBMassProductionTool/output/cb_result.bin
+   Step 5 - Start Time : 2017/09/05 PM 05:29:31:401
+   Step 5 - End Time : 2017/09/05 PM 05:29:35:06
+   Step 5 ok! Spent Time: 3.604s
+   USB Task Finished! Spent Time: 32.183s
+   Device is Pullouted.

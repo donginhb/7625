@@ -367,19 +367,19 @@ void state_video_record_entry(void *para, INT32U state)
         		ap_video_record_reply_action((STOR_SERV_FILEINFO *) ApQ_para);
                  if(ap_state_handling_file_creat_get())
 					{
-					if(cyc_record_flag==0)
+						if(cyc_record_flag==0)
 						{
 					     	if(ap_video_record_sts_get()& 0x04)
-						{
-						  led_type = LED_MOTION_DETECTION;
-						}
-						else
-						{
-					      led_type = LED_RECORD;
-						}
+							{
+							  led_type = LED_MOTION_DETECTION;
+							}
+							else
+							{
+						      led_type = LED_RECORD;
+							}
 		                   msgQSend(PeripheralTaskQ, MSG_PERIPHERAL_TASK_LED_SET, &led_type, sizeof(INT32U), MSG_PRI_NORMAL);
 						}
-					 cyc_record_flag=0;
+					 	cyc_record_flag=0;
 					}
         		break;
 
@@ -395,11 +395,11 @@ void state_video_record_entry(void *para, INT32U state)
 				else if(ap_video_record_sts_get() & VIDEO_RECORD_BUSY) 
 				{
 					if(modection_state_falg)
-						{
+					{
 						ap_video_record_func_key_active();
-						}
+					}
 					else
-						{
+					{
 				        cyc_record_flag=1;
 					    video_encode_stop();
 					    DBG_PRINT("--cyc_step--\r\n");
@@ -408,7 +408,7 @@ void state_video_record_entry(void *para, INT32U state)
 					    curr_file_info.file_handle = -1;
 					    msgQSend(StorageServiceQ, MSG_STORAGE_SERVICE_VID_REQ, NULL, NULL, MSG_PRI_NORMAL);
 					    ap_video_record_sts_set(VIDEO_RECORD_WAIT);
-						}
+					}
 				}
         		break;
 #endif

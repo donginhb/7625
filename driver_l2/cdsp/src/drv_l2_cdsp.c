@@ -28,6 +28,9 @@ extern INT8U ap_state_config_iso_get(void);
 extern INT8U ap_state_config_light_freq_get(void);
 extern void hwFront_SetSize(INT32U hsize,INT32U vsize);
 extern void hwMipi_SetSize(INT32U hsize,INT32U vsize);
+
+volatile INT8U  DayLight_mode=0;
+
 extern OS_EVENT* my_AVIEncodeApQ;
 
 #if  (USE_SENSOR_NAME == SENSOR_SOI_H22)	
@@ -1586,6 +1589,10 @@ void cdsp_ae_awb_init(void)
 	CdspDev->getSensorInfo = 1;	
 }
 
+static INT8U  night_cnt=0;
+static INT8U  day_cnt=0;
+
+
 INT32U gp_ae_awb_process(void)
 {
 	int ae_stable = 1;		
@@ -2047,6 +2054,19 @@ INT32U gp_ae_awb_process(void)
 							if(gp_cdsp_ae_is_night(ae) == 1)  
 							{
 								//DBG_PRINT("AWB Night\r\n");
+								if(1)
+								{
+								    night_cnt++;
+									day_cnt=0;
+									if(night_cnt >2)
+										{
+										night_cnt=0;
+										if(DayLight_mode == 0)
+											DBG_PRINT("---Open_ir---\n");
+							            DayLight_mode=1;
+										
+										}
+								}
 								awbmode = AWB_AUTO_CVR_NIGHT;
 						
 								gp_cdsp_awb_set_ct_offset(awb, NIGHT_WB_OFFSET); // +: warm,   -: cold , +10~-10	
@@ -2065,6 +2085,19 @@ INT32U gp_ae_awb_process(void)
 							else 				
 							{
 								//DBG_PRINT("AWB Auto\r\n");
+								if(seInfo.analog_gain <0x125)
+								{
+									day_cnt++;
+									night_cnt=0;
+									if(day_cnt > 2)
+									{
+										if(DayLight_mode)
+											DBG_PRINT("---Close_ir---\n");
+										DayLight_mode=0;
+										day_cnt=0;
+									}
+							    
+								}
 								awbmode = AWB_AUTO_CVR;
 								
 							/*	#if (USE_SENSOR_NAME == SENSOR_GC1004)
