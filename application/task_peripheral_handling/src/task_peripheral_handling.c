@@ -55,6 +55,7 @@ INT8U			card_space_less_flag = 0;
 extern volatile INT8U DayLight_mode;
 extern INT8S			video_record_sts;
 
+
 void task_peripheral_handling_entry(void * para)
 {
 	INT32U			msg_id, power_on_auto_rec_delay_cnt;
@@ -353,22 +354,33 @@ void task_peripheral_handling_entry(void * para)
 						//DBG_PRINT("*");
 					}
 				}
-				
-				if (video_record_sts & 0x06)
+
+				/*if (video_record_sts & 0x06)
 				{
 					if (DayLight_mode)
 					{
-						gpio_write_io(IR_CTRL, DATA_HIGH);
+						gpio_write_io(IR_CTRL_1, DATA_HIGH);
+						gpio_write_io(IR_CTRL_2, DATA_HIGH);
+						gpio_write_io(IR_CTRL_3, DATA_HIGH);
+						gpio_write_io(IR_CTRL_4, DATA_HIGH);
 					}
 					else 
 					{
-						gpio_write_io(IR_CTRL, DATA_LOW);
+						gpio_write_io(IR_CTRL_1, DATA_LOW);
+						gpio_write_io(IR_CTRL_2, DATA_LOW);
+						gpio_write_io(IR_CTRL_3, DATA_LOW);
+						gpio_write_io(IR_CTRL_4, DATA_LOW);
+						
 					}
 				}
 				else 
 				{
-					gpio_write_io(IR_CTRL, DATA_LOW);
+					gpio_write_io(IR_CTRL_1, DATA_LOW);
+					gpio_write_io(IR_CTRL_2, DATA_LOW);
+					gpio_write_io(IR_CTRL_3, DATA_LOW);
+					gpio_write_io(IR_CTRL_4, DATA_LOW);
 				}
+				*/
 				break;
 
 #endif

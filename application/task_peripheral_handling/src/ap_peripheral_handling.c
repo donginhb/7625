@@ -198,9 +198,28 @@ void ap_peripheral_init(void)
 	key_detect_timerid	= 0xFF;
 	init_usbstate();
 	LED_pin_init();
+	
 	gpio_init_io(CHARGE_PIN, GPIO_INPUT);
 	gpio_set_port_attribute(CHARGE_PIN, ATTRIBUTE_LOW);
 	gpio_write_io(CHARGE_PIN, 1);					//pull low
+	
+#if 1
+	gpio_init_io(IR_CTRL_1, GPIO_OUTPUT);
+	gpio_set_port_attribute(IR_CTRL_1, ATTRIBUTE_HIGH);
+	gpio_write_io(IR_CTRL_1, DATA_LOW);
+	
+	gpio_init_io(IR_CTRL_2, GPIO_OUTPUT);
+	gpio_set_port_attribute(IR_CTRL_2, ATTRIBUTE_HIGH);
+	gpio_write_io(IR_CTRL_2, DATA_LOW);
+	
+	gpio_init_io(IR_CTRL_3, GPIO_OUTPUT);
+	gpio_set_port_attribute(IR_CTRL_3, ATTRIBUTE_HIGH);
+	gpio_write_io(IR_CTRL_3, DATA_LOW);
+	
+	gpio_init_io(IR_CTRL_4, GPIO_OUTPUT);
+	gpio_set_port_attribute(IR_CTRL_4, ATTRIBUTE_HIGH);
+	gpio_write_io(IR_CTRL_4, DATA_LOW);
+#endif
 
 	//ap_peripheral_key_init();
 #if USE_ADKEY_NO
@@ -1331,6 +1350,12 @@ void ap_peripheral_key_judge(void)
 						}
 						
 						msgQSend(ApQ, MSG_APQ_VIDEO_RECORD_ACTIVE, NULL, NULL, MSG_PRI_NORMAL);
+						{
+							gpio_write_io(IR_CTRL_1, DATA_LOW);
+							gpio_write_io(IR_CTRL_2, DATA_LOW);
+							gpio_write_io(IR_CTRL_3, DATA_LOW);
+							gpio_write_io(IR_CTRL_4, DATA_LOW);
+						}
 					}
 
 					motion_cnt = 0;
@@ -1355,6 +1380,12 @@ void ap_peripheral_key_judge(void)
 							msgQSend(ApQ, MSG_APQ_VIDEO_RECORD_ACTIVE, NULL, NULL, MSG_PRI_NORMAL);
 						}
 						msgQSend(ApQ, MSG_APQ_POWER_ON_AUTO_RECORD, NULL, NULL, MSG_PRI_NORMAL);
+						{
+							gpio_write_io(IR_CTRL_1, DATA_HIGH);
+							gpio_write_io(IR_CTRL_2, DATA_HIGH);
+							gpio_write_io(IR_CTRL_3, DATA_HIGH);
+							gpio_write_io(IR_CTRL_4, DATA_HIGH);
+						}
 					}
 					
 					video_cnt = 0;
@@ -1478,7 +1509,7 @@ void ap_peripheral_charge_det(void)
 
 	pin_state			= gpio_read_io(CHARGE_PIN);
 
-	DBG_PRINT("pin_state=%d",pin_state);
+	//DBG_PRINT("pin_state=%d",pin_state);
 	if (pin_state == prev_pin_state)
 	{
 		loop_cnt++;

@@ -271,13 +271,18 @@
 #define IR_CTRL 				IO_F15//IO_B11	 //ir light 
 #define LED 					IO_F15
 
+#define IR_CTRL_1				IO_D13
+#define IR_CTRL_2				IO_B5
+#define IR_CTRL_3				IO_B4
+#define IR_CTRL_4				IO_B2
+
 #define POWER_EN				IO_B3
 #define CHARGE_PIN				IO_B1
 
 #define CDSP_IQ 				GPCV1248_JVIN_V1_0//GPCV1248_C6_V2_0	
 #define PRODUCT_NUM 			7625
-#define PRODUCT_DATA			20170822
-#define PROGRAM_VERSION_NUM 	34//80
+#define PRODUCT_DATA			20171016
+#define PROGRAM_VERSION_NUM 	34
 
 
 

@@ -1,0 +1,6 @@
+---- MSG_APQ_POWER_ON_AUTO_RECORD Matches (5 in 4 files) ----
+ap_peripheral_key_judge in ap_peripheral_handling.c (F:\work\item\7625\v032\program\application\task_peripheral_handling\src) : 								msgQSend(ApQ, MSG_APQ_POWER_ON_AUTO_RECORD, NULL, NULL, MSG_PRI_NORMAL);
+ap_peripheral_key_judge in ap_peripheral_handling.c (F:\work\item\7625\v032\program\application\task_peripheral_handling\src) : 						msgQSend(ApQ, MSG_APQ_POWER_ON_AUTO_RECORD, NULL, NULL, MSG_PRI_NORMAL);
+state_video_record.c (F:\work\item\7625\v032\program\application\task_state_handling\state_video_record\src) line 236 : 			case MSG_APQ_POWER_ON_AUTO_RECORD:
+task_peripheral_handling_entry in task_peripheral_handling.c (F:\work\item\7625\v032\program\application\task_peripheral_handling\src) : 										msgQSend(ApQ, MSG_APQ_POWER_ON_AUTO_RECORD, NULL, NULL, MSG_PRI_NORMAL);
+turnkey_drv_msg.h (F:\work\item\7625\v032\program\application\inc) line 460 : 	MSG_APQ_POWER_ON_AUTO_RECORD,

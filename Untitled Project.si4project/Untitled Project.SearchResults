@@ -1,4 +1,0 @@
----- SD_POS Matches (3 in 2 files) ----
-driver_l1_cfg.h (project\Helicopter_SPIFC\inc) line 124 : #define SD_POS                      SDC0_IOA2_IOA3_IOA4_IOA5_IOA6_IOA7///SDC0_IOA2_IOA3_IOA4_IOA5_IOA6_IOA7//SDC1_IOD10_IOD11_IOD12_IOD13_IOD14_IOD15//SDC0_IOA2_IOA3_IOA4_IOA5_IOA6_IOA7
-gpio_pad_init2 in drv_l1_gpio.c (driver_l1\common\src) : 	switch(SD_POS)
-gpio_drving_init in drv_l1_gpio.c (driver_l1\common\src) : 	switch(SD_POS)
